@@ -1,0 +1,75 @@
+# Loupe: plan
+
+AI-guided GitHub pull request review. Surfaces what matters (business logic, routing, algorithms) and collapses what doesn't (imports, lockfiles, generated code). Self-hosted: one server binary plus SQLite in Docker, light enough for a homelab that is also a gaming PC.
+
+## Architecture
+
+```
+Browser (web/: React + @pierre/diffs)
+  │  passkey (WebAuthn PRF) unlocks the inference vault locally
+  │  sends a short-lived access token with each review job
+  ▼
+loupe-api (api/: axum + SQLite)
+  ├─ GitHub App sign-in; all GitHub calls use the requesting user's token
+  ├─ deterministic pre-pass (hunk kinds)
+  ├─ LLM orchestration over the Responses API (no hosted tools)
+  │    └─ read-only tools: list_files / read_file / grep via GitHub API at pinned SHAs
+  ├─ review cache + provenance, access-checked on read
+  └─ encrypted vault blobs (server cannot decrypt)
+
+loupe-gateway (gateway/, runs on the user's machine)
+  └─ Sign in with ChatGPT: PKCE + 127.0.0.1 loopback → /connect#<tokens> → browser vault
+```
+
+### Why the server runs inference but holds no credentials
+- The server makes the model call itself, so cached reviews are real model output. Clients never upload results, so they can't forge them.
+- The browser holds the refresh token (in the vault) and sends only the 1-hour access token per job. Open question: if `auth.openai.com` blocks CORS on refresh, the server relays the refresh (seen in transit, never stored).
+
+### No sandbox needed
+The model can't execute anything: the server gets text back and validates it against a schema. Tools are Rust functions doing GitHub API GETs. The repo, SHAs and user token are bound by the job and aren't tool arguments, so a prompt injection can't read a different repo into a shared cache. If shell-capable agents are ever wanted, they don't run on this host (that would need a per-job Firecracker VM).
+
+### Remaining threat: prompt injection in PR content
+- Deterministic floors: hunks the pre-pass labels `code` with control-flow changes can be dimmed, never collapsed, by the model alone.
+- Coverage: a review must assess every hunk id (`GuidedReview::missing_hunks`).
+- Collapsed is never hidden.
+- Provenance: who requested a review, model, prompt version and custom instructions are stored and shown. Reviews requested by the PR author get a badge.
+
+## Code access (no clones)
+| Need | API |
+|---|---|
+| Diff | `GET /pulls/{n}/files` (3000-file cap; fetch blobs and diff locally when `patch` is missing) |
+| Tree | `GET /git/trees/{sha}?recursive=1` (includes blob SHAs) |
+| File | `GET /git/blobs/{sha}` or `/contents/{path}?ref=` |
+| Batch | GraphQL `object(expression: "<sha>:<path>")` with aliases |
+
+Blobs are immutable, so they're cached forever by `(repo_id, blob_sha)`, still behind access checks. No GitHub code search exists for PR heads: `grep` runs in-process (Rust `regex`, linear time) over a capped set of fetched files. Per-review budgets: ~30 tool calls, byte and line caps. SIWC has no `previous_response_id` over HTTP, so the server resends the conversation each round; keep tool output trimmed.
+
+## Review schema
+`crates/protocol/src/review.rs`: summary, walkthrough steps (with optional mermaid diagram), per-hunk importance, rationale and concerns, questions. Versioned; cache keys include `SCHEMA_VERSION`.
+
+Cache keys:
+- Whole review: `(repo_id, pr, base_sha, head_sha, model, prompt_version, schema_version, instructions_hash)`
+- Per file: `(repo_id, patch_hash, model, prompt_version)`, for incremental re-review after a push.
+
+## Features
+- **Guided review**: walkthrough sidebar drives scroll; low-importance and deterministic hunks are collapsed; rationale as `@pierre/diffs` line annotations.
+- **Mermaid diagrams**: the model adds a flow diagram to a step when useful. Lazy-loaded `mermaid`, strict security level, show source on parse failure.
+- **Self-review**: draft PRs or any `base...head`. A problem-finding prompt; human comments plus AI suggestions to accept, edit or dismiss; export markdown pinned to head SHA with `path:line` ranges and snippets for a coding agent.
+- **Sharing**: per-user trusted GitHub logins (optional org defaults). Opening a PR with a matching cached review prompts "@alice generated a guided review 2h ago with <model>. Use it / generate my own". Trusted sources can auto-load.
+
+## Inference credentials
+- **Vault**: WebAuthn PRF → HKDF → AES-GCM key, derived in the browser. The server stores `(credential_id, prf_salt, ciphertext, version)`. Writes use compare-and-swap on `version` because SIWC refresh tokens rotate. Multiple passkeys wrap one vault key; passphrase fallback for browsers without PRF.
+- **ChatGPT (SIWC)**: `loupe-gateway login --server <url>`. Registration state (`ext_agent_host_id`, issued `client_id`) in `~/.config/loupe/gateway.json` (0600). Tokens are never stored by the gateway.
+- **API keys**: entered in the browser, stored in the same vault.
+
+## Milestones
+0. [x] Scaffold: workspace, Makefiles/Procfiles, Dockerfile, GitHub App sign-in + sessions, PR diff view with `@pierre/diffs`, gateway sign-in flow.
+1. [ ] Experiments: SIWC CORS for `/v1/responses` and the token endpoint from a browser origin; `text.format: json_schema` under SIWC; first real gateway sign-in end to end.
+2. [ ] Deterministic pre-pass (tree-sitter: import-only, lockfile, generated via `.gitattributes`, rename, whitespace) and hunk-level collapse UI.
+3. [ ] Guided review with a pasted API key: prompt, structured output, SSE progress, coverage validation, review cache with access checks.
+4. [ ] Passkey vault, then ChatGPT via the gateway handoff; per-job access tokens; refresh path.
+5. [ ] Read-only GitHub tools + blob cache.
+6. [ ] Sharing: trusted users, "use @x's review?" prompt, provenance badges, incremental re-review.
+7. [ ] Mermaid diagrams.
+8. [ ] Self-review mode + markdown export.
+9. [ ] Gateway release workflow (cross-platform binaries); GitHub App manifest flow for one-click self-host setup.

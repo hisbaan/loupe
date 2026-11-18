@@ -1,0 +1,12 @@
+/target
+bin/
+
+# env
+.env
+.env.*
+!.env.example
+
+# sqlite
+*.db
+*.db-shm
+*.db-wal

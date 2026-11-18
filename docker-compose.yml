@@ -1,0 +1,23 @@
+# Example deployment. Copy api/.env.example to .env and fill it in.
+services:
+  loupe:
+    image: ghcr.io/hisbaan/loupe/api:latest
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      LOUPE_WEB_DIR: /web
+      LOUPE_DATABASE_URL: sqlite:///data/loupe.db
+    ports:
+      - 3000:3000
+    volumes:
+      - loupe-data:/data
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+
+volumes:
+  loupe-data:

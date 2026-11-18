@@ -1,0 +1,8 @@
+[workspace]
+resolver = "3"
+members = ["api", "gateway", "crates/protocol"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+publish = false
