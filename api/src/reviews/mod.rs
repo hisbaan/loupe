@@ -2,6 +2,7 @@
 
 mod output;
 mod prompt;
+mod tools;
 
 use std::{convert::Infallible, time::Duration};
 
@@ -23,8 +24,12 @@ use crate::{
     github,
     inference::{self, Credential},
     pulls::{self, Author},
+    source::Source,
     state::AppState,
 };
+
+/// Model turns per review, including the final answer.
+const MAX_TURNS: usize = 10;
 
 pub fn routes() -> Router<AppState> {
     Router::new().route(
@@ -221,29 +226,62 @@ impl Job {
             return Err("Nothing to review: every change was collapsed by the pre-pass.".into());
         }
 
-        self.status("Generating review").await;
-        let mut last_sent = 0;
-        let raw = inference::generate(
-            &self.state.http,
-            &self.state.config.openai_base_url,
-            &self.credential,
-            inference::Request {
-                model: &self.model,
-                instructions: prompt::INSTRUCTIONS,
-                input: &prompt.input,
-                schema_name: output::SCHEMA_NAME,
-                schema: output::schema(),
-            },
-            |chars| {
-                if chars - last_sent >= 500 {
-                    last_sent = chars;
-                    // Progress is best-effort; drop it if the browser is slow or gone.
-                    let _ = self.tx.try_send(Progress::Generating { chars });
+        let use_tools = prompt.input.len() <= prompt::MAX_TOOL_INPUT_CHARS;
+        let instructions = if use_tools {
+            format!("{}{}", prompt::INSTRUCTIONS, prompt::TOOL_INSTRUCTIONS)
+        } else {
+            prompt::INSTRUCTIONS.to_owned()
+        };
+        let definitions = if use_tools { tools::definitions() } else { Vec::new() };
+        let mut toolbox = tools::Toolbox::new(Source::new(self.state.clone(), token, &pr).map_err(app_err)?);
+        let mut input = vec![inference::user_message(&prompt.input)];
+
+        let raw = 'turns: {
+            for turn_number in 1..=MAX_TURNS {
+                self.status("Generating review").await;
+                let mut last_sent = 0;
+                let turn = inference::respond(
+                    &self.state.http,
+                    &self.state.config.openai_base_url,
+                    &self.credential,
+                    inference::Request {
+                        model: &self.model,
+                        instructions: &instructions,
+                        input: &input,
+                        schema_name: output::SCHEMA_NAME,
+                        schema: output::schema(),
+                        tools: &definitions,
+                        forbid_tools: toolbox.exhausted() || turn_number == MAX_TURNS,
+                    },
+                    |chars| {
+                        if chars - last_sent >= 500 {
+                            last_sent = chars;
+                            // Progress is best-effort; drop it if the browser is slow or gone.
+                            let _ = self.tx.try_send(Progress::Generating { chars });
+                        }
+                    },
+                )
+                .await
+                .map_err(|err| format!("{err:#}"))?;
+
+                let calls: Vec<_> = turn.function_calls().collect();
+                if calls.is_empty() {
+                    break 'turns turn.text;
                 }
-            },
-        )
-        .await
-        .map_err(|err| format!("{err:#}"))?;
+                let mut outputs = Vec::with_capacity(calls.len());
+                for call in calls {
+                    self.status(&tools::Toolbox::<Source>::describe(call.name, call.arguments))
+                        .await;
+                    let result = toolbox.call(call.name, call.arguments).await;
+                    // Repository content is as untrusted as the diff.
+                    let wrapped = format!("<{tag}>\n{result}\n</{tag}>", tag = prompt.tag);
+                    outputs.push(inference::function_output(call.call_id, wrapped));
+                }
+                input.extend(turn.items.iter().cloned());
+                input.extend(outputs);
+            }
+            return Err("The model kept calling tools without finishing the review.".into());
+        };
 
         let review = output::parse(&raw, &prompt.required_hunks)
             .map_err(|err| format!("The model's review was invalid: {err}"))?;

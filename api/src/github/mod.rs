@@ -23,12 +23,12 @@ pub struct GitHubUser {
     pub avatar_url: Option<String>,
 }
 
-pub async fn get_json<T: DeserializeOwned>(state: &AppState, token: &str, path: &str) -> AppResult<T> {
+async fn get(state: &AppState, token: &str, path: &str, accept: &str) -> AppResult<reqwest::Response> {
     let response = state
         .http
         .get(format!("{API_BASE}{path}"))
         .bearer_auth(token)
-        .header("Accept", "application/vnd.github+json")
+        .header("Accept", accept)
         .header("X-GitHub-Api-Version", "2022-11-28")
         .send()
         .await?;
@@ -40,5 +40,21 @@ pub async fn get_json<T: DeserializeOwned>(state: &AppState, token: &str, path: 
             status: StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
         });
     }
-    Ok(response.json().await?)
+    Ok(response)
+}
+
+pub async fn get_json<T: DeserializeOwned>(state: &AppState, token: &str, path: &str) -> AppResult<T> {
+    Ok(get(state, token, path, "application/vnd.github+json")
+        .await?
+        .json()
+        .await?)
+}
+
+/// Raw bytes, e.g. of a blob.
+pub async fn get_raw(state: &AppState, token: &str, path: &str) -> AppResult<Vec<u8>> {
+    Ok(get(state, token, path, "application/vnd.github.raw+json")
+        .await?
+        .bytes()
+        .await?
+        .to_vec())
 }

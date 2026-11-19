@@ -7,6 +7,7 @@ mod inference;
 mod prepass;
 mod pulls;
 mod reviews;
+mod source;
 mod state;
 mod vault;
 
@@ -43,6 +44,7 @@ async fn main() -> anyhow::Result<()> {
         .await?;
     sqlx::migrate!("./migrations").run(&db).await?;
 
+    source::spawn_pruning(db.clone());
     let state = AppState::new(config.clone(), db);
 
     let api = Router::new()

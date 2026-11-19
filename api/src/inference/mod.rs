@@ -48,24 +48,70 @@ impl std::fmt::Debug for Credential {
 pub struct Request<'a> {
     pub model: &'a str,
     pub instructions: &'a str,
-    pub input: &'a str,
+    /// The whole conversation so far: Sign in with ChatGPT doesn't support
+    /// `previous_response_id`, and `store: false` means nothing is kept
+    /// server-side, so every turn resends it.
+    pub input: &'a [Value],
     pub schema_name: &'a str,
     pub schema: Value,
+    /// Function tool definitions; empty for none.
+    pub tools: &'a [Value],
+    /// Set to stop the model calling tools and make it answer.
+    pub forbid_tools: bool,
 }
 
-/// Runs one structured-output request and returns the JSON text the model
-/// produced. `on_progress` receives the number of characters generated so far.
-pub async fn generate(
+/// A user message input item.
+pub fn user_message(text: &str) -> Value {
+    json!({ "role": "user", "content": text })
+}
+
+/// What the model produced in one turn.
+#[derive(Debug, Default)]
+pub struct Turn {
+    /// Output items in order (reasoning, messages, function calls), ready to
+    /// append to the next turn's input.
+    pub items: Vec<Value>,
+    /// The final answer text, when the model answered rather than calling tools.
+    pub text: String,
+}
+
+pub struct FunctionCall<'a> {
+    pub call_id: &'a str,
+    pub name: &'a str,
+    pub arguments: &'a str,
+}
+
+impl Turn {
+    pub fn function_calls(&self) -> impl Iterator<Item = FunctionCall<'_>> {
+        self.items
+            .iter()
+            .filter(|item| item["type"] == "function_call")
+            .map(|item| FunctionCall {
+                call_id: item["call_id"].as_str().unwrap_or_default(),
+                name: item["name"].as_str().unwrap_or_default(),
+                arguments: item["arguments"].as_str().unwrap_or_default(),
+            })
+    }
+}
+
+/// The input item answering a function call.
+pub fn function_output(call_id: &str, output: String) -> Value {
+    json!({ "type": "function_call_output", "call_id": call_id, "output": output })
+}
+
+/// Runs one turn with structured output. `on_progress` receives the number of
+/// answer characters generated so far in this turn.
+pub async fn respond(
     http: &reqwest::Client,
     base_url: &str,
     credential: &Credential,
     request: Request<'_>,
     mut on_progress: impl FnMut(usize),
-) -> anyhow::Result<String> {
-    let body = json!({
+) -> anyhow::Result<Turn> {
+    let mut body = json!({
         "model": request.model,
         "instructions": request.instructions,
-        "input": [{ "role": "user", "content": request.input }],
+        "input": request.input,
         "text": {
             "format": {
                 "type": "json_schema",
@@ -74,9 +120,16 @@ pub async fn generate(
                 "strict": true,
             }
         },
+        // With `store: false`, reasoning only carries over between turns if
+        // its encrypted form is sent back.
+        "include": ["reasoning.encrypted_content"],
         "store": false,
         "stream": true,
     });
+    if !request.tools.is_empty() {
+        body["tools"] = Value::from(request.tools);
+        body["tool_choice"] = Value::from(if request.forbid_tools { "none" } else { "auto" });
+    }
 
     let response = http
         .post(format!("{base_url}/responses"))
@@ -90,7 +143,7 @@ pub async fn generate(
     }
 
     let mut parser = sse::Parser::default();
-    let mut output = String::new();
+    let mut turn = Turn::default();
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.context("stream from OpenAI was interrupted")?;
@@ -98,10 +151,13 @@ pub async fn generate(
             let event: Value = serde_json::from_str(&data).context("malformed event from OpenAI")?;
             match event["type"].as_str() {
                 Some("response.output_text.delta") => {
-                    output.push_str(event["delta"].as_str().unwrap_or_default());
-                    on_progress(output.len());
+                    turn.text.push_str(event["delta"].as_str().unwrap_or_default());
+                    on_progress(turn.text.len());
                 }
-                Some("response.completed") => return Ok(output),
+                // Sent back unchanged (ids included) on the next turn, as
+                // OpenAI's stateless reasoning examples do.
+                Some("response.output_item.done") => turn.items.push(event["item"].clone()),
+                Some("response.completed") => return Ok(turn),
                 Some("response.incomplete") => {
                     let reason = event["response"]["incomplete_details"]["reason"]
                         .as_str()
@@ -194,9 +250,11 @@ mod tests {
         Request {
             model: "m",
             instructions: "i",
-            input: "x",
+            input: &[],
             schema_name: "s",
             schema: json!({}),
+            tools: &[],
+            forbid_tools: false,
         }
     }
 
@@ -217,13 +275,31 @@ mod tests {
         )
         .await;
         let mut progress = Vec::new();
-        let out = generate(&reqwest::Client::new(), &base, &credential(), request(), |n| {
+        let turn = respond(&reqwest::Client::new(), &base, &credential(), request(), |n| {
             progress.push(n)
         })
         .await
         .unwrap();
-        assert_eq!(out, r#"{"a":1}"#);
+        assert_eq!(turn.text, r#"{"a":1}"#);
         assert_eq!(progress, vec![5, 7]);
+    }
+
+    #[tokio::test]
+    async fn collects_function_calls() {
+        let base = mock(
+            StatusCode::OK,
+            "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_1\",\"type\":\"reasoning\",\"encrypted_content\":\"e\"}}\n\n\
+             data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_1\",\"type\":\"function_call\",\"call_id\":\"c1\",\"name\":\"read_file\",\"arguments\":\"{}\"}}\n\n\
+             data: {\"type\":\"response.completed\",\"response\":{}}\n\n",
+        )
+        .await;
+        let turn = respond(&reqwest::Client::new(), &base, &credential(), request(), |_| {})
+            .await
+            .unwrap();
+        assert_eq!(turn.items.len(), 2);
+        assert_eq!(turn.items[0]["encrypted_content"], "e");
+        let calls: Vec<_> = turn.function_calls().map(|c| (c.call_id, c.name)).collect();
+        assert_eq!(calls, vec![("c1", "read_file")]);
     }
 
     #[tokio::test]
@@ -233,7 +309,7 @@ mod tests {
             "data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"message\":\"usage limit\"}}}\n\n",
         )
         .await;
-        let err = generate(&reqwest::Client::new(), &base, &credential(), request(), |_| {})
+        let err = respond(&reqwest::Client::new(), &base, &credential(), request(), |_| {})
             .await
             .unwrap_err();
         assert_eq!(err.to_string(), "usage limit");
@@ -242,7 +318,7 @@ mod tests {
     #[tokio::test]
     async fn reports_rejected_credentials() {
         let base = mock(StatusCode::UNAUTHORIZED, r#"{"error":{"message":"Incorrect API key"}}"#).await;
-        let err = generate(&reqwest::Client::new(), &base, &credential(), request(), |_| {})
+        let err = respond(&reqwest::Client::new(), &base, &credential(), request(), |_| {})
             .await
             .unwrap_err();
         assert!(err.to_string().contains("rejected the credential"));
@@ -255,7 +331,7 @@ mod tests {
             "data: {\"type\":\"response.output_text.delta\",\"delta\":\"x\"}\n\n",
         )
         .await;
-        let err = generate(&reqwest::Client::new(), &base, &credential(), request(), |_| {})
+        let err = respond(&reqwest::Client::new(), &base, &credential(), request(), |_| {})
             .await
             .unwrap_err();
         assert!(err.to_string().contains("before the response completed"));
