@@ -22,7 +22,7 @@
 
 ## Code Style: Rust
 - `cargo fmt` (max width 120, `rustfmt.toml`). Edition 2024.
-- API layout: one module per feature (`auth/`, `github/`, `pulls/`) exposing `routes()`; mounted in `api/src/main.rs`.
+- API layout: one module per feature (`auth/`, `github/`, `pulls/`, `reviews/`) exposing `routes()`; mounted in `api/src/main.rs`. `prepass/` (diff classification) and `inference/` (Responses API client) are libraries.
 - Handlers return `AppResult<T>`; map failures to `AppError` (`api/src/error.rs`). Never leak internal error text to clients.
 - Auth: take `CurrentUser` as an extractor to require a session.
 - SQL: runtime `sqlx::query`/`query_as` with `?` binds (no compile-time macros, so builds don't need a DB). Migrations in `api/migrations/`, applied on startup.
@@ -40,6 +40,7 @@
 - **Gateway handoff**: tokens go gateway → browser via the URL fragment of `/connect`. Never move them into a query string or a server request.
 - **LLM execution**: the model never triggers code execution on the host. Tools are in-process Rust functions doing read-only GitHub API GETs, pinned to the job's repo and base/head SHAs (not model-controlled). No clones, no subprocesses, no shell.
 - **Pre-pass** (`api/src/prepass/`): the PR author controls its input. It may only err towards `Code`/not collapsible. Self-declared generated files (marker or name) collapse only if they already existed; whitespace inside a line is never ignored; indentation is significant in Python/YAML/Makefiles; side-effect imports are code; lockfiles from non-registry sources are shown.
+- **Prompts**: PR content goes inside a per-request random delimiter and is described as untrusted. Bump `PROMPT_VERSION` on any prompt or input-format change.
 - **Model output** is untrusted: parse into `loupe_protocol::review` types, reject reviews that miss hunks, and render mermaid with `securityLevel: "strict"`.
 
 ## Generated / Build Outputs

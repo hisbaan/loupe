@@ -67,7 +67,10 @@ Cache keys:
 1. [ ] Experiments: SIWC CORS for `/v1/responses` and the token endpoint from a browser origin; `text.format: json_schema` under SIWC; first real gateway sign-in end to end.
 2. [x] Deterministic pre-pass (`api/src/prepass/`: import-only, lockfile with unusual-source check, generated/vendored, rename, whitespace) and hunk-level collapse UI.
    - [ ] Follow-up: honour `linguist-generated` from `.gitattributes` *at the base SHA* (the PR can edit it at head).
-3. [ ] Guided review with a pasted API key: prompt, structured output, SSE progress, coverage validation, review cache with access checks.
+3. [x] Guided review with a pasted API key: prompt (`api/src/reviews/prompt.rs`), strict structured output, SSE progress, coverage validation, review cache keyed by (repo, PR, base, head, model, prompt, schema) and access-checked by refetching the PR with the reader's token.
+   - [ ] Large PRs: per-file pass + synthesis instead of the single-pass size limit.
+   - [ ] One repair retry when the model skips hunks.
+   - [ ] Deduplicate concurrent jobs for the same cache key.
 4. [ ] Passkey vault, then ChatGPT via the gateway handoff; per-job access tokens; refresh path.
 5. [ ] Read-only GitHub tools + blob cache.
 6. [ ] Sharing: trusted users, "use @x's review?" prompt, provenance badges, incremental re-review.

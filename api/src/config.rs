@@ -12,6 +12,8 @@ pub struct Config {
     pub secret_key: [u8; 32],
     pub github_client_id: String,
     pub github_client_secret: String,
+    /// Override for tests or OpenAI-compatible proxies.
+    pub openai_base_url: String,
 }
 
 impl Config {
@@ -33,6 +35,9 @@ impl Config {
             secret_key,
             github_client_id: required("GITHUB_CLIENT_ID")?,
             github_client_secret: required("GITHUB_CLIENT_SECRET")?,
+            openai_base_url: optional("LOUPE_OPENAI_BASE_URL", crate::inference::DEFAULT_BASE_URL)
+                .trim_end_matches('/')
+                .to_owned(),
         })
     }
 

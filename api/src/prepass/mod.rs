@@ -38,6 +38,9 @@ pub struct HunkAnalysis {
     pub new_lines: u32,
     pub kind: HunkKind,
     pub collapsible: bool,
+    /// The hunk as it appears in the patch, for building prompts.
+    #[serde(skip)]
+    pub text: String,
     /// Why something that looks collapsible isn't, or anything else a reviewer
     /// should see.
     pub notes: Vec<String>,
@@ -92,6 +95,7 @@ fn analyze_hunk(path: &str, class: &PathClass, added_file: bool, hunk: Hunk<'_>)
         new_lines: hunk.new_lines,
         kind,
         collapsible,
+        text: hunk.text.to_owned(),
         notes,
     }
 }

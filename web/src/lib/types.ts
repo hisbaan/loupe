@@ -72,3 +72,53 @@ export type PullResponse = {
   files: AnalyzedFile[]
   truncated: boolean
 }
+
+// Mirrors loupe_protocol::review.
+export type Importance = "critical" | "normal" | "low"
+
+export type Diagram = {
+  kind: string
+  source: string
+  caption: string | null
+}
+
+export type WalkthroughStep = {
+  title: string
+  why: string
+  hunk_ids: string[]
+  diagram: Diagram | null
+}
+
+export type HunkAssessment = {
+  importance: Importance
+  rationale: string
+  concerns: string[]
+}
+
+export type GuidedReview = {
+  schema_version: number
+  summary: string
+  walkthrough: WalkthroughStep[]
+  hunks: Record<string, HunkAssessment>
+  questions: string[]
+}
+
+// Mirrors api/src/reviews.
+export type ReviewRecord = {
+  id: number
+  model: string
+  prompt_version: number
+  base_sha: string
+  head_sha: string
+  created_at: number
+  requested_by: { login: string; avatar_url: string | null }
+  review: GuidedReview
+}
+
+export type ReviewProgress =
+  | { type: "status"; message: string }
+  | { type: "generating"; chars: number }
+  | { type: "done"; record: ReviewRecord }
+  | { type: "error"; message: string }
+
+export type Credential = { kind: "api_key"; token: string }

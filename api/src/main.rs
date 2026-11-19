@@ -3,8 +3,10 @@ mod config;
 mod crypto;
 mod error;
 mod github;
+mod inference;
 mod prepass;
 mod pulls;
+mod reviews;
 mod state;
 
 use std::path::Path;
@@ -45,7 +47,8 @@ async fn main() -> anyhow::Result<()> {
     let api = Router::new()
         .route("/health", get(|| async { "ok" }))
         .merge(auth::api_routes())
-        .merge(pulls::routes());
+        .merge(pulls::routes())
+        .merge(reviews::routes());
 
     let index = Path::new(&config.web_dir).join("index.html");
     let app = Router::new()

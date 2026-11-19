@@ -1,13 +1,17 @@
+import type { DiffLineAnnotation } from "@pierre/diffs"
 import { PatchDiff } from "@pierre/diffs/react"
 import { useState } from "react"
+import { ImportanceBadge } from "@/components/importance-badge"
 import { KIND_LABELS, planCollapse, toUnifiedPatch } from "@/lib/patch"
-import type { AnalyzedFile } from "@/lib/types"
+import { fileAnchor } from "@/lib/utils"
+import type { AnalyzedFile, HunkAssessment } from "@/lib/types"
 
 type FileDiffCardProps = {
   file: AnalyzedFile
+  assessments?: Record<string, HunkAssessment>
 }
 
-export function FileDiffCard({ file }: FileDiffCardProps) {
+export function FileDiffCard({ file, assessments }: FileDiffCardProps) {
   const [expanded, setExpanded] = useState(false)
   const { analysis } = file
   const patch = toUnifiedPatch(file)
@@ -25,8 +29,23 @@ export function FileDiffCard({ file }: FileDiffCardProps) {
     summary = `${hunks} hidden: ${plan.hiddenKinds.map((k) => KIND_LABELS[k]).join(", ")}`
   }
 
+  // One annotation at the top of each assessed hunk.
+  const annotations: DiffLineAnnotation<HunkAssessment>[] = []
+  for (const hunk of analysis.hunks) {
+    const assessment = assessments?.[hunk.id]
+    if (!assessment) continue
+    annotations.push(
+      hunk.new_lines > 0
+        ? { side: "additions", lineNumber: hunk.new_start, metadata: assessment }
+        : { side: "deletions", lineNumber: hunk.old_start, metadata: assessment },
+    )
+  }
+
   return (
-    <section className="overflow-hidden rounded-md border border-neutral-200 dark:border-neutral-800">
+    <section
+      id={fileAnchor(file.filename)}
+      className="scroll-mt-4 overflow-hidden rounded-md border border-neutral-200 dark:border-neutral-800"
+    >
       {(summary || analysis.kind || notes.length > 0) && (
         <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 bg-neutral-100 px-3 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900">
           {analysis.kind && (
@@ -54,13 +73,33 @@ export function FileDiffCard({ file }: FileDiffCardProps) {
           </span>
         </div>
       ) : (
-        <PatchDiff
+        <PatchDiff<HunkAssessment, undefined>
           // Remount when switching patches so the diff re-parses cleanly.
           key={partiallyCollapsed ? "reduced" : "full"}
           patch={partiallyCollapsed ? plan.reducedPatch! : patch}
           options={{ diffStyle: "split", themeType: "system", collapsed: wholeFileCollapsed, stickyHeader: true }}
+          lineAnnotations={annotations}
+          renderAnnotation={(annotation) => <HunkNote assessment={annotation.metadata} />}
         />
       )}
     </section>
+  )
+}
+
+function HunkNote({ assessment }: { assessment: HunkAssessment }) {
+  return (
+    <div className="border-y border-neutral-200 bg-white px-3 py-2 font-sans text-sm dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="flex items-start gap-2">
+        <ImportanceBadge importance={assessment.importance} />
+        <span>{assessment.rationale}</span>
+      </div>
+      {assessment.concerns.length > 0 && (
+        <ul className="mt-1 list-disc pl-14 text-amber-700 dark:text-amber-400">
+          {assessment.concerns.map((c) => (
+            <li key={c}>{c}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
