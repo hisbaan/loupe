@@ -1,4 +1,6 @@
 import { ImportanceBadge } from "@/components/importance-badge"
+import { linkButtonClass } from "@/components/ui"
+import { diagramAnchor } from "@/lib/utils"
 import type { GuidedReview, Importance } from "@/lib/types"
 
 type WalkthroughProps = {
@@ -30,6 +32,15 @@ export function Walkthrough({ review, onSelectHunk }: WalkthroughProps) {
               </span>
               <span className="mt-1 block text-xs text-neutral-500">{step.why}</span>
             </button>
+            {step.diagram && (
+              <button
+                type="button"
+                onClick={() => document.getElementById(diagramAnchor(i))?.scrollIntoView({ behavior: "smooth" })}
+                className={`ml-2 text-xs ${linkButtonClass}`}
+              >
+                Diagram
+              </button>
+            )}
           </li>
         )
       })}

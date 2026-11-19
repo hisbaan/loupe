@@ -80,6 +80,6 @@ Cache keys:
 6. [x] Sharing: per-user trusted reviewers with auto-load (`api/src/trust/`), "@x generated a review… use it?" offer, provenance badges (yours, trusted, requested by PR author, earlier commit, updated from), one review per requester per cache key, incremental update from an earlier review (unchanged hunk ids keep their assessments; only new hunks go to the model).
    - [ ] Org-level default trusted reviewers.
    - [ ] Re-review only changed files' context when updating (today the whole PR's file list and description are resent).
-7. [ ] Mermaid diagrams.
+7. [x] Mermaid diagrams: lazy-loaded `mermaid` (strict security level, SVG text labels, `secure` keys so `%%{init}%%` can't loosen them), rendered as an `<img>` data URL so the SVG can never script the page; source shown on parse failure. Diagrams sit under the summary; walkthrough steps link to them.
 8. [ ] Self-review mode + markdown export.
 9. [ ] Gateway release workflow (cross-platform binaries); GitHub App manifest flow for one-click self-host setup.

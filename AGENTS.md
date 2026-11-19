@@ -45,7 +45,7 @@
 - **Source cache**: `source_trees`/`source_blobs` are shared across users and keyed by `repo_id`; only build a `Source` from a pull request fetched with the requesting user's token.
 - **Pre-pass** (`api/src/prepass/`): the PR author controls its input. It may only err towards `Code`/not collapsible. Self-declared generated files (marker or name) collapse only if they already existed; whitespace inside a line is never ignored; indentation is significant in Python/YAML/Makefiles; side-effect imports are code; lockfiles from non-registry sources are shown.
 - **Prompts**: PR content, and tool output (repository files), goes inside a per-request random delimiter and is described as untrusted. Bump `PROMPT_VERSION` on any prompt or input-format change.
-- **Model output** is untrusted: parse into `loupe_protocol::review` types, reject reviews that miss hunks, and render mermaid with `securityLevel: "strict"`.
+- **Model output** is untrusted: parse into `loupe_protocol::review` types, reject reviews that miss hunks, and render mermaid only through `web/src/lib/mermaid.ts` (`securityLevel: "strict"`, shown as an `<img>`, never inserted as SVG/HTML).
 
 ## Generated / Build Outputs
 - `target/`, `*/bin/`, `web/dist/`, `*.db*` are build or runtime outputs.

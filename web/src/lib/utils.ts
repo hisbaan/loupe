@@ -6,6 +6,10 @@ export function fileAnchor(filename: string) {
   return `file:${filename}`
 }
 
+export function diagramAnchor(stepIndex: number) {
+  return `diagram:${stepIndex}`
+}
+
 export function timeAgo(unixSeconds: number) {
   const seconds = Math.max(0, Date.now() / 1000 - unixSeconds)
   if (seconds < 60) return "just now"

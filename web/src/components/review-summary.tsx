@@ -1,6 +1,7 @@
+import { MermaidDiagram } from "@/components/mermaid-diagram"
 import { ProvenanceBadges } from "@/components/provenance-badges"
 import { coverage, shortSha } from "@/lib/reviews"
-import { timeAgo } from "@/lib/utils"
+import { diagramAnchor, timeAgo } from "@/lib/utils"
 import type { AnalyzedFile, ReviewRecord } from "@/lib/types"
 
 type ReviewSummaryProps = {
@@ -37,6 +38,17 @@ export function ReviewSummary({ record, files }: ReviewSummaryProps) {
             ))}
           </ul>
         </>
+      )}
+      {review.walkthrough.map(
+        (step, i) =>
+          step.diagram && (
+            <div key={i} id={diagramAnchor(i)} className="mt-4 scroll-mt-4">
+              <h2 className="mb-2 text-sm font-medium">
+                {i + 1}. {step.title}
+              </h2>
+              <MermaidDiagram source={step.diagram.source} caption={step.diagram.caption} title={step.title} />
+            </div>
+          ),
       )}
     </section>
   )
