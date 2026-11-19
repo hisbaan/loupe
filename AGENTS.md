@@ -39,6 +39,7 @@
 - **Inference credentials**: the server never stores usable inference credentials. ChatGPT/API-key credentials live in a client-side passkey-encrypted vault; the server stores only ciphertext and receives short-lived access tokens per job, in memory only.
 - **Gateway handoff**: tokens go gateway → browser via the URL fragment of `/connect`. Never move them into a query string or a server request.
 - **LLM execution**: the model never triggers code execution on the host. Tools are in-process Rust functions doing read-only GitHub API GETs, pinned to the job's repo and base/head SHAs (not model-controlled). No clones, no subprocesses, no shell.
+- **Pre-pass** (`api/src/prepass/`): the PR author controls its input. It may only err towards `Code`/not collapsible. Self-declared generated files (marker or name) collapse only if they already existed; whitespace inside a line is never ignored; indentation is significant in Python/YAML/Makefiles; side-effect imports are code; lockfiles from non-registry sources are shown.
 - **Model output** is untrusted: parse into `loupe_protocol::review` types, reject reviews that miss hunks, and render mermaid with `securityLevel: "strict"`.
 
 ## Generated / Build Outputs

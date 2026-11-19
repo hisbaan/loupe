@@ -25,11 +25,23 @@ pub enum HunkKind {
     ImportOnly,
     Lockfile,
     Generated,
+    Vendored,
     Rename,
     WhitespaceOnly,
     Docs,
     Test,
     Config,
+}
+
+impl HunkKind {
+    /// Kinds that may be collapsed without the model's input. Whether a given
+    /// hunk actually is collapsed also depends on the pre-pass's safety checks.
+    pub fn collapsible(self) -> bool {
+        matches!(
+            self,
+            Self::ImportOnly | Self::Lockfile | Self::Generated | Self::Vendored | Self::Rename | Self::WhitespaceOnly
+        )
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

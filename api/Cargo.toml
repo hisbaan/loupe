@@ -13,7 +13,9 @@ axum-extra = { version = "0.12.6", features = ["cookie"] }
 base64 = "0.23.1"
 dotenvy = "0.15.7"
 hex = "0.4.3"
+loupe-protocol = { version = "0.1.0", path = "../crates/protocol" }
 rand = "0.10.4"
+regex = "1.13.2"
 reqwest = { version = "0.13.5", features = ["json", "form"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

@@ -3,6 +3,7 @@ mod config;
 mod crypto;
 mod error;
 mod github;
+mod prepass;
 mod pulls;
 mod state;
 

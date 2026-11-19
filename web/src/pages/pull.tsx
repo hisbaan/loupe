@@ -35,6 +35,7 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
   }
 
   const { pull, files, truncated } = result.data
+  const collapsedFiles = files.filter((f) => f.analysis.collapsible).length
   return (
     <Layout>
       <div className="mb-6">
@@ -42,6 +43,10 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
           {owner}/{repo} #{pull.number} · {pull.user.login} wants to merge {pull.head.ref} into {pull.base.ref}
         </p>
         <h1 className="mt-1 text-2xl font-semibold">{pull.title}</h1>
+        <p className="mt-2 text-sm text-neutral-500">
+          {files.length} files changed
+          {collapsedFiles > 0 && ` · ${collapsedFiles} collapsed`}
+        </p>
         {truncated && <p className="mt-2 text-sm text-amber-600">GitHub only returns the first 3000 files of this pull request.</p>}
       </div>
       <div className="flex flex-col gap-4">

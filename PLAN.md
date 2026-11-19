@@ -65,7 +65,8 @@ Cache keys:
 ## Milestones
 0. [x] Scaffold: workspace, Makefiles/Procfiles, Dockerfile, GitHub App sign-in + sessions, PR diff view with `@pierre/diffs`, gateway sign-in flow.
 1. [ ] Experiments: SIWC CORS for `/v1/responses` and the token endpoint from a browser origin; `text.format: json_schema` under SIWC; first real gateway sign-in end to end.
-2. [ ] Deterministic pre-pass (tree-sitter: import-only, lockfile, generated via `.gitattributes`, rename, whitespace) and hunk-level collapse UI.
+2. [x] Deterministic pre-pass (`api/src/prepass/`: import-only, lockfile with unusual-source check, generated/vendored, rename, whitespace) and hunk-level collapse UI.
+   - [ ] Follow-up: honour `linguist-generated` from `.gitattributes` *at the base SHA* (the PR can edit it at head).
 3. [ ] Guided review with a pasted API key: prompt, structured output, SSE progress, coverage validation, review cache with access checks.
 4. [ ] Passkey vault, then ChatGPT via the gateway handoff; per-job access tokens; refresh path.
 5. [ ] Read-only GitHub tools + blob cache.

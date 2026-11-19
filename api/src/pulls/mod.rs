@@ -11,6 +11,7 @@ use crate::{
     auth::CurrentUser,
     error::{AppError, AppResult},
     github::{self, get_json},
+    prepass::{self, FileAnalysis, FileInput},
     state::AppState,
 };
 
@@ -59,9 +60,16 @@ pub struct PullFile {
 }
 
 #[derive(Serialize)]
+pub struct AnalyzedFile {
+    #[serde(flatten)]
+    file: PullFile,
+    analysis: FileAnalysis,
+}
+
+#[derive(Serialize)]
 pub struct PullResponse {
     pull: Pull,
-    files: Vec<PullFile>,
+    files: Vec<AnalyzedFile>,
     truncated: bool,
 }
 
@@ -89,6 +97,18 @@ async fn get_pull(
             break;
         }
     }
+
+    let files = files
+        .into_iter()
+        .map(|file| {
+            let analysis = prepass::analyze(FileInput {
+                filename: &file.filename,
+                status: &file.status,
+                patch: file.patch.as_deref(),
+            });
+            AnalyzedFile { file, analysis }
+        })
+        .collect();
 
     Ok(Json(PullResponse { pull, files, truncated }))
 }

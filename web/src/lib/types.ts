@@ -31,8 +31,44 @@ export type PullFile = {
   patch: string | null
 }
 
+// Mirrors loupe_protocol::review::HunkKind.
+export type HunkKind =
+  | "code"
+  | "import_only"
+  | "lockfile"
+  | "generated"
+  | "vendored"
+  | "rename"
+  | "whitespace_only"
+  | "docs"
+  | "test"
+  | "config"
+
+// Mirrors api/src/prepass.
+export type HunkAnalysis = {
+  id: string
+  header: string
+  old_start: number
+  old_lines: number
+  new_start: number
+  new_lines: number
+  kind: HunkKind
+  collapsible: boolean
+  notes: string[]
+}
+
+export type FileAnalysis = {
+  kind: HunkKind | null
+  collapsible: boolean
+  hunks: HunkAnalysis[]
+}
+
+export type AnalyzedFile = PullFile & {
+  analysis: FileAnalysis
+}
+
 export type PullResponse = {
   pull: Pull
-  files: PullFile[]
+  files: AnalyzedFile[]
   truncated: boolean
 }
