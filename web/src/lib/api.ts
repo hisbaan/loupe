@@ -1,4 +1,14 @@
-import type { Credential, Me, PullResponse, ReviewProgress, ReviewRecord } from "@/lib/types"
+import type {
+  ChatGptTokens,
+  Credential,
+  Me,
+  NewVaultKey,
+  PullResponse,
+  ReviewProgress,
+  ReviewRecord,
+  VaultKeyRecord,
+  VaultRecord,
+} from "@/lib/types"
 
 export type ApiResult<T> =
   | { ok: true; status: number; data: T }
@@ -7,6 +17,7 @@ export type ApiResult<T> =
 async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
   try {
     const res = await fetch(`/api${path}`, { credentials: "same-origin", ...init })
+    if (res.status === 204) return { ok: true, status: res.status, data: undefined as T }
     if (res.ok) return { ok: true, status: res.status, data: (await res.json()) as T }
     return { ok: false, status: res.status, error: await errorMessage(res) }
   } catch (err) {
@@ -19,8 +30,12 @@ async function errorMessage(res: Response): Promise<string> {
   return body?.error ?? res.statusText
 }
 
+function sendJson(method: string, body: unknown): RequestInit {
+  return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+}
+
 function postJson(body: unknown): RequestInit {
-  return { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+  return sendJson("POST", body)
 }
 
 function pullPath(owner: string, repo: string, number: number) {
@@ -55,6 +70,19 @@ export const api = {
   reviews: (owner: string, repo: string, number: number) =>
     request<{ reviews: ReviewRecord[] }>(`${pullPath(owner, repo, number)}/reviews`),
   models: (credential: Credential) => request<{ models: string[] }>("/inference/models", postJson({ credential })),
+  /** Relayed through the server; 410 means the user has to sign in again. */
+  refreshChatgpt: (body: { client_id: string; refresh_token: string }) =>
+    request<ChatGptTokens>("/inference/chatgpt/refresh", postJson(body)),
+
+  vault: () => request<{ vault: VaultRecord | null }>("/vault"),
+  createVault: (body: { ciphertext: string; key: NewVaultKey }) =>
+    request<{ vault: VaultRecord }>("/vault", postJson(body)),
+  /** Compare-and-swap on `version`; 409 means someone else wrote first. */
+  updateVault: (body: { version: number; ciphertext: string }) =>
+    request<{ version: number }>("/vault", sendJson("PUT", body)),
+  deleteVault: () => request<void>("/vault", { method: "DELETE" }),
+  addVaultKey: (key: NewVaultKey) => request<VaultKeyRecord>("/vault/keys", postJson(key)),
+  removeVaultKey: (id: number) => request<void>(`/vault/keys/${id}`, { method: "DELETE" }),
 
   /** Starts a review and reports progress until it finishes or fails. */
   async generateReview(

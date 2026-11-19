@@ -4,3 +4,4 @@
 pub mod handoff;
 pub mod hunk;
 pub mod review;
+pub mod siwc;

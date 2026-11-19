@@ -9,7 +9,7 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     response::sse::{Event, KeepAlive, Sse},
-    routing::{get, post},
+    routing::get,
 };
 use futures_util::Stream;
 use loupe_protocol::review::{GuidedReview, SCHEMA_VERSION};
@@ -27,12 +27,10 @@ use crate::{
 };
 
 pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route(
-            "/repos/{owner}/{repo}/pulls/{number}/reviews",
-            get(list_reviews).post(create_review),
-        )
-        .route("/inference/models", post(list_models))
+    Router::new().route(
+        "/repos/{owner}/{repo}/pulls/{number}/reviews",
+        get(list_reviews).post(create_review),
+    )
 }
 
 #[derive(Serialize)]
@@ -279,25 +277,4 @@ impl Job {
             .map_err(|e| app_err(e.into()))?;
         row.into_record().map_err(app_err)
     }
-}
-
-#[derive(Deserialize)]
-struct ModelsRequest {
-    credential: Credential,
-}
-
-#[derive(Serialize)]
-struct ModelsResponse {
-    models: Vec<String>,
-}
-
-async fn list_models(
-    _user: CurrentUser,
-    State(state): State<AppState>,
-    Json(body): Json<ModelsRequest>,
-) -> AppResult<Json<ModelsResponse>> {
-    let models = inference::list_models(&state.http, &state.config.openai_base_url, &body.credential)
-        .await
-        .map_err(|err| AppError::BadRequest(format!("{err:#}")))?;
-    Ok(Json(ModelsResponse { models }))
 }

@@ -95,7 +95,7 @@ pub fn handoff_fragment(handoff: &ChatGptHandoff) -> String {
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(handoff).expect("handoff serializes"))
 }
 
-pub fn new_handoff(host: &host::HostState, client_id: String, tokens: siwc::Tokens) -> ChatGptHandoff {
+pub fn new_handoff(host: &host::HostState, client_id: String, tokens: loupe_protocol::siwc::Tokens) -> ChatGptHandoff {
     ChatGptHandoff {
         version: HANDOFF_VERSION,
         client_id,

@@ -121,4 +121,36 @@ export type ReviewProgress =
   | { type: "done"; record: ReviewRecord }
   | { type: "error"; message: string }
 
-export type Credential = { kind: "api_key"; token: string }
+// Mirrors api/src/inference::Credential: sent with each job, never stored.
+export type Credential = { kind: "api_key"; token: string } | { kind: "chatgpt"; token: string }
+
+// Mirrors loupe_protocol::siwc::Tokens.
+export type ChatGptTokens = {
+  access_token: string
+  refresh_token: string | null
+  id_token: string | null
+  expires_at: number
+  scope: string
+}
+
+// Mirrors api/src/vault. Binary fields are unpadded base64url.
+export type VaultKeyRecord = {
+  id: number
+  kind: "passkey" | "passphrase"
+  label: string
+  credential_id: string | null
+  salt: string
+  iterations: number | null
+  wrapped_key: string
+  created_at: number
+}
+
+export type VaultRecord = {
+  version: number
+  ciphertext: string
+  keys: VaultKeyRecord[]
+}
+
+export type NewVaultKey =
+  | { kind: "passkey"; label: string; credential_id: string; salt: string; wrapped_key: string }
+  | { kind: "passphrase"; label: string; salt: string; iterations: number; wrapped_key: string }

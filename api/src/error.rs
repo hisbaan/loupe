@@ -11,6 +11,13 @@ pub enum AppError {
     Unauthorized,
     #[error("{0}")]
     BadRequest(String),
+    #[error("not found")]
+    NotFound,
+    #[error("{0}")]
+    Conflict(String),
+    /// Something the client holds has expired for good, e.g. a revoked grant.
+    #[error("{0}")]
+    Gone(String),
     #[error("GitHub returned {status}")]
     GitHub { status: StatusCode },
     #[error(transparent)]
@@ -34,6 +41,9 @@ impl IntoResponse for AppError {
         let status = match &self {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::NotFound => StatusCode::NOT_FOUND,
+            Self::Conflict(_) => StatusCode::CONFLICT,
+            Self::Gone(_) => StatusCode::GONE,
             // A 404 from GitHub with the user's own token is also how missing
             // access to a private repo looks, so pass those through.
             Self::GitHub { status } if status.is_client_error() => *status,

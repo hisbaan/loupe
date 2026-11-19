@@ -23,7 +23,7 @@ loupe-gateway (gateway/, runs on the user's machine)
 
 ### Why the server runs inference but holds no credentials
 - The server makes the model call itself, so cached reviews are real model output. Clients never upload results, so they can't forge them.
-- The browser holds the refresh token (in the vault) and sends only the 1-hour access token per job. Open question: if `auth.openai.com` blocks CORS on refresh, the server relays the refresh (seen in transit, never stored).
+- The browser holds the refresh token (in the vault) and sends only the 1-hour access token per job. Refreshes currently go through a server relay (the refresh token is seen in transit, never stored) because CORS on `auth.openai.com` is untested.
 
 ### No sandbox needed
 The model can't execute anything: the server gets text back and validates it against a schema. Tools are Rust functions doing GitHub API GETs. The repo, SHAs and user token are bound by the job and aren't tool arguments, so a prompt injection can't read a different repo into a shared cache. If shell-capable agents are ever wanted, they don't run on this host (that would need a per-job Firecracker VM).
@@ -71,7 +71,9 @@ Cache keys:
    - [ ] Large PRs: per-file pass + synthesis instead of the single-pass size limit.
    - [ ] One repair retry when the model skips hunks.
    - [ ] Deduplicate concurrent jobs for the same cache key.
-4. [ ] Passkey vault, then ChatGPT via the gateway handoff; per-job access tokens; refresh path.
+4. [x] Passkey vault (`api/src/vault/`, `web/src/lib/vault/`): PRF → HKDF wraps a random vault key, passphrase (PBKDF2, 600k) fallback, several keys per vault, compare-and-swap writes. ChatGPT via the gateway handoff into the vault; per-job credentials; refresh relayed by the server (`POST /api/inference/chatgpt/refresh`) and serialised across tabs with Web Locks.
+   - [ ] Decided: keep the relay until the milestone 1 CORS test. If `auth.openai.com` accepts browser requests, refresh straight from the browser and delete the relay; if not, keep the relay.
+   - [ ] Optional "stay unlocked in this tab" (non-extractable key in IndexedDB) if re-unlocking after every reload gets tedious.
 5. [ ] Read-only GitHub tools + blob cache.
 6. [ ] Sharing: trusted users, "use @x's review?" prompt, provenance badges, incremental re-review.
 7. [ ] Mermaid diagrams.

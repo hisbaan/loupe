@@ -1,7 +1,11 @@
-import { useState, type FormEvent } from "react"
+import { useState } from "react"
+import { buttonClass, errorMessage, inputClass, linkButtonClass } from "@/components/ui"
+import { VaultGate } from "@/components/vault-gate"
 import { api } from "@/lib/api"
-import { useInferenceSettings } from "@/lib/inference-settings"
+import { PROVIDER_LABELS, availableProviders, credentialFor, useInferencePreferences, type Provider } from "@/lib/inference"
+import { Link } from "@/components/link"
 import type { ReviewRecord } from "@/lib/types"
+import { useVault, type VaultContents } from "@/lib/vault/store"
 
 type ReviewControlsProps = {
   owner: string
@@ -11,30 +15,51 @@ type ReviewControlsProps = {
   onReview: (record: ReviewRecord) => void
 }
 
+export function ReviewControls(props: ReviewControlsProps) {
+  const state = useVault()
+  if (state.status !== "unlocked") return <VaultGate />
+  return <Controls {...props} contents={state.contents} />
+}
+
 type RunState = { kind: "idle" } | { kind: "running"; message: string } | { kind: "error"; message: string }
 
-export function ReviewControls({ owner, repo, number, hasReview, onReview }: ReviewControlsProps) {
-  const { settings, update, credential } = useInferenceSettings()
-  const [editing, setEditing] = useState(!credential || !settings.model)
+function Controls({ owner, repo, number, hasReview, onReview, contents }: ReviewControlsProps & { contents: VaultContents }) {
+  const providers = availableProviders(contents)
+  const { provider, model, setProvider, setModel } = useInferencePreferences(providers)
   const [models, setModels] = useState<string[]>([])
   const [run, setRun] = useState<RunState>({ kind: "idle" })
 
-  async function loadModels() {
-    if (!credential) return
-    const result = await api.models(credential)
-    if (result.ok) setModels(result.data.models)
-    else setRun({ kind: "error", message: result.error })
+  if (!provider) {
+    return (
+      <p className="text-sm text-neutral-500">
+        No inference credentials yet.{" "}
+        <Link href="/settings" className={linkButtonClass}>
+          Connect ChatGPT or add an API key
+        </Link>
+        .
+      </p>
+    )
   }
 
-  function save(event: FormEvent) {
-    event.preventDefault()
-    if (credential && settings.model) setEditing(false)
+  async function loadModels(provider: Provider) {
+    try {
+      const result = await api.models(await credentialFor(provider))
+      if (result.ok) setModels(result.data.models)
+      else setRun({ kind: "error", message: result.error })
+    } catch (err) {
+      setRun({ kind: "error", message: errorMessage(err) })
+    }
   }
 
-  async function generate() {
-    if (!credential || !settings.model) return
+  async function generate(provider: Provider) {
     setRun({ kind: "running", message: "Starting" })
-    await api.generateReview(owner, repo, number, { credential, model: settings.model }, (progress) => {
+    let credential
+    try {
+      credential = await credentialFor(provider)
+    } catch (err) {
+      return setRun({ kind: "error", message: errorMessage(err) })
+    }
+    await api.generateReview(owner, repo, number, { credential, model }, (progress) => {
       switch (progress.type) {
         case "status":
           setRun({ kind: "running", message: progress.message })
@@ -53,68 +78,46 @@ export function ReviewControls({ owner, repo, number, hasReview, onReview }: Rev
     })
   }
 
-  if (editing) {
-    return (
-      <form onSubmit={save} className="flex flex-col gap-2 text-sm">
-        <label className="flex flex-col gap-1">
-          <span className="text-neutral-500">OpenAI API key</span>
-          <input
-            type="password"
-            autoComplete="off"
-            value={settings.apiKey}
-            onChange={(e) => update({ apiKey: e.target.value.trim() })}
-            placeholder="sk-..."
-            className="rounded-md border border-neutral-300 bg-transparent px-2 py-1.5 dark:border-neutral-700"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="flex items-center justify-between text-neutral-500">
-            Model
-            <button type="button" onClick={loadModels} disabled={!credential} className="text-blue-600 hover:underline disabled:opacity-50 dark:text-blue-400">
-              Load models
-            </button>
-          </span>
-          <input
-            list="loupe-models"
-            value={settings.model}
-            onChange={(e) => update({ model: e.target.value.trim() })}
-            className="rounded-md border border-neutral-300 bg-transparent px-2 py-1.5 dark:border-neutral-700"
-          />
-          <datalist id="loupe-models">
-            {models.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        </label>
-        <p className="text-xs text-neutral-500">The key stays in this tab and is sent to Loupe only with each review request.</p>
-        <button
-          type="submit"
-          disabled={!credential || !settings.model}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-        >
-          Save
-        </button>
-        {run.kind === "error" && <p className="text-xs text-red-600">{run.message}</p>}
-      </form>
-    )
-  }
-
   return (
     <div className="flex flex-col gap-2 text-sm">
+      {providers.length > 1 && (
+        <select
+          value={provider}
+          onChange={(e) => {
+            setProvider(e.target.value as Provider)
+            setModels([])
+          }}
+          className={inputClass}
+        >
+          {providers.map((p) => (
+            <option key={p} value={p}>
+              {PROVIDER_LABELS[p]}
+            </option>
+          ))}
+        </select>
+      )}
+      <label className="flex flex-col gap-1">
+        <span className="flex items-center justify-between text-neutral-500">
+          Model{providers.length === 1 && ` (${PROVIDER_LABELS[provider]})`}
+          <button type="button" onClick={() => loadModels(provider)} className={linkButtonClass}>
+            Load models
+          </button>
+        </span>
+        <input list="loupe-models" value={model} onChange={(e) => setModel(e.target.value.trim())} className={inputClass} />
+        <datalist id="loupe-models">
+          {models.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+      </label>
       <button
         type="button"
-        onClick={generate}
-        disabled={run.kind === "running"}
-        className="rounded-md bg-neutral-900 px-3 py-1.5 text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+        onClick={() => generate(provider)}
+        disabled={run.kind === "running" || !model}
+        className={buttonClass}
       >
         {hasReview ? "Regenerate review" : "Generate guided review"}
       </button>
-      <div className="flex justify-between text-xs text-neutral-500">
-        <span className="truncate">{settings.model}</span>
-        <button type="button" onClick={() => setEditing(true)} className="text-blue-600 hover:underline dark:text-blue-400">
-          Settings
-        </button>
-      </div>
       {run.kind === "running" && <p className="text-xs text-neutral-500">{run.message}…</p>}
       {run.kind === "error" && <p className="text-xs text-red-600">{run.message}</p>}
     </div>

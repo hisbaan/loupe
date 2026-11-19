@@ -5,9 +5,14 @@
 //! `store: false` and `stream: true`, which Sign in with ChatGPT requires.
 //!
 //! Credentials arrive with each request and live only in memory for the
-//! duration of the job. Never log them.
+//! duration of the job. Never log them. Also serves the model list and the
+//! ChatGPT refresh relay (`routes`).
 
+mod chatgpt;
+mod routes;
 mod sse;
+
+pub use routes::routes;
 
 use anyhow::{Context, anyhow, bail};
 use futures_util::StreamExt;
@@ -19,13 +24,8 @@ pub const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 #[derive(Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Credential {
-    ApiKey {
-        token: String,
-    },
-    #[allow(dead_code)] // Wired up with the passkey vault.
-    Chatgpt {
-        token: String,
-    },
+    ApiKey { token: String },
+    Chatgpt { token: String },
 }
 
 impl Credential {
