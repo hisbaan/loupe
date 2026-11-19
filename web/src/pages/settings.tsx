@@ -1,10 +1,11 @@
-import { useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useState, type FormEvent, type ReactNode } from "react"
 import { Layout } from "@/components/layout"
 import { buttonClass, errorMessage, inputClass, linkButtonClass, secondaryButtonClass } from "@/components/ui"
 import { PassphraseFields, VaultGate } from "@/components/vault-gate"
+import { api } from "@/lib/api"
 import { timeAgo } from "@/lib/utils"
 import { currentLogin, passphraseProblem, useVault, vault, type VaultContents } from "@/lib/vault/store"
-import type { VaultKeyRecord } from "@/lib/types"
+import type { TrustedReviewer, VaultKeyRecord } from "@/lib/types"
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -41,7 +42,9 @@ export function SettingsPage() {
   return (
     <Layout>
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
-        <h1 className="text-2xl font-semibold">Inference credentials</h1>
+        <h1 className="text-2xl font-semibold">Settings</h1>
+        {state.status !== "signed_out" && <TrustedSection />}
+        <h2 className="mt-2 text-lg font-semibold">Inference credentials</h2>
         {state.status === "unlocked" ? (
           <>
             <ChatGptSection contents={state.contents} />
@@ -55,6 +58,88 @@ export function SettingsPage() {
         )}
       </div>
     </Layout>
+  )
+}
+
+function TrustedSection() {
+  const [trusted, setTrusted] = useState<TrustedReviewer[] | null>(null)
+  const [login, setLogin] = useState("")
+  const [autoLoad, setAutoLoad] = useState(false)
+  const { busy, error, run } = useAction()
+
+  useEffect(() => {
+    api.trusted().then((r) => setTrusted(r.ok ? r.data.trusted : []))
+  }, [])
+
+  async function save(next: string, auto: boolean) {
+    const result = await api.trust(next, auto)
+    if (!result.ok) throw new Error(result.error)
+    setTrusted((ts) =>
+      [...(ts ?? []).filter((t) => t.login.toLowerCase() !== next.toLowerCase()), result.data].sort((a, b) =>
+        a.login.localeCompare(b.login),
+      ),
+    )
+  }
+
+  async function add(event: FormEvent) {
+    event.preventDefault()
+    const name = login.trim().replace(/^@/, "")
+    if (await run(() => save(name, autoLoad))) {
+      setLogin("")
+      setAutoLoad(false)
+    }
+  }
+
+  async function remove(name: string) {
+    const result = await api.untrust(name)
+    if (!result.ok) throw new Error(result.error)
+    setTrusted((ts) => (ts ?? []).filter((t) => t.login !== name))
+  }
+
+  return (
+    <Section title="Trusted reviewers">
+      <p className="mb-3 text-sm text-neutral-500">
+        When one of these people has already generated a review of a pull request, Loupe offers theirs first, and
+        you can update it after new commits. With auto-load on, it's shown straight away.
+      </p>
+      {trusted && trusted.length > 0 && (
+        <ul className="mb-3 divide-y divide-neutral-200 text-sm dark:divide-neutral-800">
+          {trusted.map((t) => (
+            <li key={t.login} className="flex items-center gap-3 py-2">
+              <span className="flex-1">@{t.login}</span>
+              <label className="flex items-center gap-1.5 text-neutral-500">
+                <input
+                  type="checkbox"
+                  checked={t.auto_load}
+                  disabled={busy}
+                  onChange={(e) => run(() => save(t.login, e.target.checked))}
+                />
+                Auto-load
+              </label>
+              <button type="button" disabled={busy} onClick={() => run(() => remove(t.login))} className={linkButtonClass}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form onSubmit={add} className="flex items-center gap-2 text-sm">
+        <input
+          placeholder="GitHub username"
+          value={login}
+          onChange={(e) => setLogin(e.target.value)}
+          className={`${inputClass} min-w-0 flex-1`}
+        />
+        <label className="flex items-center gap-1.5 text-neutral-500">
+          <input type="checkbox" checked={autoLoad} onChange={(e) => setAutoLoad(e.target.checked)} />
+          Auto-load
+        </label>
+        <button type="submit" disabled={busy || !login.trim()} className={buttonClass}>
+          Trust
+        </button>
+      </form>
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+    </Section>
   )
 }
 

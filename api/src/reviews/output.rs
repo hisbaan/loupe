@@ -115,13 +115,26 @@ fn clip(s: String, max: usize) -> String {
 
 /// Parses and validates model output against the hunks it was asked about.
 /// Unknown hunk ids are dropped; any missing hunk rejects the review.
-pub fn parse(raw: &str, required_hunks: &[String]) -> anyhow::Result<GuidedReview> {
+/// Parses the model's review. It must assess every hunk in `required_hunks`.
+/// `carried` holds assessments kept from an earlier review for unchanged hunks
+/// (empty unless this is an update); the model can't change them, but the
+/// walkthrough may refer to them.
+pub fn parse(
+    raw: &str,
+    required_hunks: &[String],
+    carried: &BTreeMap<String, HunkAssessment>,
+) -> anyhow::Result<GuidedReview> {
     let model: ModelReview = serde_json::from_str(raw)?;
-    let known: HashSet<&str> = required_hunks.iter().map(String::as_str).collect();
+    let required: HashSet<&str> = required_hunks.iter().map(String::as_str).collect();
+    let known: HashSet<&str> = required
+        .iter()
+        .copied()
+        .chain(carried.keys().map(String::as_str))
+        .collect();
 
-    let mut hunks = BTreeMap::new();
+    let mut hunks = carried.clone();
     for h in model.hunks {
-        if known.contains(h.hunk_id.as_str()) {
+        if required.contains(h.hunk_id.as_str()) {
             hunks.insert(
                 h.hunk_id,
                 HunkAssessment {
@@ -190,7 +203,7 @@ mod tests {
     #[test]
     fn accepts_complete_review_and_drops_unknown_ids() {
         let required = vec!["h_a".to_owned(), "h_b".to_owned()];
-        let review = parse(&output(&["h_a", "h_b", "h_zzz"]), &required).unwrap();
+        let review = parse(&output(&["h_a", "h_b", "h_zzz"]), &required, &BTreeMap::new()).unwrap();
         assert_eq!(review.hunks.len(), 2);
         assert_eq!(review.walkthrough[0].hunk_ids, vec!["h_a"]);
     }
@@ -198,7 +211,7 @@ mod tests {
     #[test]
     fn rejects_missing_hunks() {
         let required = vec!["h_a".to_owned(), "h_b".to_owned()];
-        let err = parse(&output(&["h_a"]), &required).unwrap_err();
+        let err = parse(&output(&["h_a"]), &required, &BTreeMap::new()).unwrap_err();
         assert!(err.to_string().contains("skipped 1 of 2"));
     }
 
@@ -225,5 +238,22 @@ mod tests {
             }
         }
         check(&schema());
+    }
+
+    #[test]
+    fn keeps_carried_assessments() {
+        let carried = BTreeMap::from([(
+            "h_zzz".to_owned(),
+            HunkAssessment {
+                importance: Importance::Low,
+                rationale: "old".into(),
+                concerns: vec![],
+            },
+        )]);
+        // The model re-assesses the carried hunk; the earlier assessment wins.
+        let review = parse(&output(&["h_a", "h_zzz"]), &["h_a".to_owned()], &carried).unwrap();
+        assert_eq!(review.hunks["h_zzz"].rationale, "old");
+        assert_eq!(review.hunks["h_a"].rationale, "r");
+        assert_eq!(review.walkthrough[0].hunk_ids, vec!["h_a", "h_zzz"]);
     }
 }

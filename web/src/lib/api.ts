@@ -6,6 +6,7 @@ import type {
   PullResponse,
   ReviewProgress,
   ReviewRecord,
+  TrustedReviewer,
   VaultKeyRecord,
   VaultRecord,
 } from "@/lib/types"
@@ -80,6 +81,11 @@ export const api = {
   /** Compare-and-swap on `version`; 409 means someone else wrote first. */
   updateVault: (body: { version: number; ciphertext: string }) =>
     request<{ version: number }>("/vault", sendJson("PUT", body)),
+  trusted: () => request<{ trusted: TrustedReviewer[] }>("/trusted"),
+  trust: (login: string, autoLoad: boolean) =>
+    request<TrustedReviewer>(`/trusted/${encodeURIComponent(login)}`, sendJson("PUT", { auto_load: autoLoad })),
+  untrust: (login: string) => request<void>(`/trusted/${encodeURIComponent(login)}`, { method: "DELETE" }),
+
   deleteVault: () => request<void>("/vault", { method: "DELETE" }),
   addVaultKey: (key: NewVaultKey) => request<VaultKeyRecord>("/vault/keys", postJson(key)),
   removeVaultKey: (id: number) => request<void>(`/vault/keys/${id}`, { method: "DELETE" }),
@@ -89,7 +95,7 @@ export const api = {
     owner: string,
     repo: string,
     number: number,
-    body: { credential: Credential; model: string },
+    body: { credential: Credential; model: string; based_on?: number },
     onProgress: (progress: ReviewProgress) => void,
   ) {
     try {

@@ -77,7 +77,9 @@ Cache keys:
 5. [x] Read-only GitHub tools + blob cache: `list_files`, `read_file`, `grep` (`api/src/reviews/tools.rs`) over `api/src/source/` (trees and blobs by SHA, cached in SQLite, pruned after 30 days). Multi-turn function calling with `store: false` (conversation resent each turn, reasoning echoed back encrypted); budgets of 25 calls, 150 KB of tool output and 10 turns; tools disabled above 150k characters of diff.
    - [ ] Verify `include: ["reasoning.encrypted_content"]` and echoed items are accepted under Sign in with ChatGPT and by non-reasoning models (milestone 1).
    - [ ] Show which files the model read in the review's provenance.
-6. [ ] Sharing: trusted users, "use @x's review?" prompt, provenance badges, incremental re-review.
+6. [x] Sharing: per-user trusted reviewers with auto-load (`api/src/trust/`), "@x generated a review… use it?" offer, provenance badges (yours, trusted, requested by PR author, earlier commit, updated from), one review per requester per cache key, incremental update from an earlier review (unchanged hunk ids keep their assessments; only new hunks go to the model).
+   - [ ] Org-level default trusted reviewers.
+   - [ ] Re-review only changed files' context when updating (today the whole PR's file list and description are resent).
 7. [ ] Mermaid diagrams.
 8. [ ] Self-review mode + markdown export.
 9. [ ] Gateway release workflow (cross-platform binaries); GitHub App manifest flow for one-click self-host setup.

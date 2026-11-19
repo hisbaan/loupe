@@ -1,9 +1,10 @@
 import { useState } from "react"
-import { buttonClass, errorMessage, inputClass, linkButtonClass } from "@/components/ui"
+import { buttonClass, errorMessage, inputClass, linkButtonClass, secondaryButtonClass } from "@/components/ui"
 import { VaultGate } from "@/components/vault-gate"
 import { api } from "@/lib/api"
 import { PROVIDER_LABELS, availableProviders, credentialFor, useInferencePreferences, type Provider } from "@/lib/inference"
 import { Link } from "@/components/link"
+import { shortSha } from "@/lib/reviews"
 import type { ReviewRecord } from "@/lib/types"
 import { useVault, type VaultContents } from "@/lib/vault/store"
 
@@ -12,6 +13,8 @@ type ReviewControlsProps = {
   repo: string
   number: number
   hasReview: boolean
+  /** An earlier review that can be updated with only the new changes. */
+  updateFrom: ReviewRecord | null
   onReview: (record: ReviewRecord) => void
 }
 
@@ -23,7 +26,15 @@ export function ReviewControls(props: ReviewControlsProps) {
 
 type RunState = { kind: "idle" } | { kind: "running"; message: string } | { kind: "error"; message: string }
 
-function Controls({ owner, repo, number, hasReview, onReview, contents }: ReviewControlsProps & { contents: VaultContents }) {
+function Controls({
+  owner,
+  repo,
+  number,
+  hasReview,
+  updateFrom,
+  onReview,
+  contents,
+}: ReviewControlsProps & { contents: VaultContents }) {
   const providers = availableProviders(contents)
   const { provider, model, setProvider, setModel } = useInferencePreferences(providers)
   const [models, setModels] = useState<string[]>([])
@@ -51,7 +62,7 @@ function Controls({ owner, repo, number, hasReview, onReview, contents }: Review
     }
   }
 
-  async function generate(provider: Provider) {
+  async function generate(provider: Provider, basedOn?: number) {
     setRun({ kind: "running", message: "Starting" })
     let credential
     try {
@@ -59,7 +70,7 @@ function Controls({ owner, repo, number, hasReview, onReview, contents }: Review
     } catch (err) {
       return setRun({ kind: "error", message: errorMessage(err) })
     }
-    await api.generateReview(owner, repo, number, { credential, model }, (progress) => {
+    await api.generateReview(owner, repo, number, { credential, model, based_on: basedOn }, (progress) => {
       switch (progress.type) {
         case "status":
           setRun({ kind: "running", message: progress.message })
@@ -118,6 +129,18 @@ function Controls({ owner, repo, number, hasReview, onReview, contents }: Review
       >
         {hasReview ? "Regenerate review" : "Generate guided review"}
       </button>
+      {updateFrom && (
+        <button
+          type="button"
+          onClick={() => generate(provider, updateFrom.id)}
+          disabled={run.kind === "running" || !model}
+          title="Keeps assessments of unchanged hunks and reviews only what's new"
+          className={secondaryButtonClass}
+        >
+          Update {updateFrom.trust === "mine" ? "your" : `@${updateFrom.requested_by.login}'s`} review of{" "}
+          {shortSha(updateFrom.head_sha)}
+        </button>
+      )}
       {run.kind === "running" && <p className="text-xs text-neutral-500">{run.message}…</p>}
       {run.kind === "error" && <p className="text-xs text-red-600">{run.message}</p>}
     </div>

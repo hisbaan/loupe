@@ -2,9 +2,12 @@ import { useEffect, useState } from "react"
 import { FileDiffCard } from "@/components/file-diff-card"
 import { Layout } from "@/components/layout"
 import { ReviewControls } from "@/components/review-controls"
+import { ReviewList } from "@/components/review-list"
+import { ReviewOffer } from "@/components/review-offer"
 import { ReviewSummary } from "@/components/review-summary"
 import { Walkthrough } from "@/components/walkthrough"
 import { api, type ApiResult } from "@/lib/api"
+import { autoSelected, updatableReview } from "@/lib/reviews"
 import { fileAnchor } from "@/lib/utils"
 import type { PullResponse, ReviewRecord } from "@/lib/types"
 
@@ -16,7 +19,10 @@ type PullPageProps = {
 
 export function PullPage({ owner, repo, number }: PullPageProps) {
   const [result, setResult] = useState<ApiResult<PullResponse> | null>(null)
-  const [record, setRecord] = useState<ReviewRecord | null>(null)
+  const [reviews, setReviews] = useState<ReviewRecord[]>([])
+  // null: nothing chosen yet, so fall back to the automatic choice.
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [offerDismissed, setOfferDismissed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -24,7 +30,7 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
       if (!cancelled) setResult(r)
     })
     api.reviews(owner, repo, number).then((r) => {
-      if (!cancelled && r.ok) setRecord(r.data.reviews[0] ?? null)
+      if (!cancelled && r.ok) setReviews(r.data.reviews)
     })
     return () => {
       cancelled = true
@@ -43,6 +49,18 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
   }
 
   const { pull, files, truncated } = result.data
+  const record = reviews.find((r) => r.id === selectedId) ?? autoSelected(reviews)
+  // Offer the best remaining review: current before earlier commits, then
+  // trusted before others (the list is already newest first).
+  const offer =
+    record || offerDismissed
+      ? null
+      : ([...reviews].sort((a, b) => Number(b.current) - Number(a.current) || trustRank(a) - trustRank(b))[0] ?? null)
+
+  function addReview(added: ReviewRecord) {
+    setReviews((rs) => [added, ...rs.filter((r) => r.id !== added.id)])
+    setSelectedId(added.id)
+  }
   const collapsedFiles = files.filter((f) => f.analysis.collapsible).length
   const fileByHunk = new Map(files.flatMap((f) => f.analysis.hunks.map((h) => [h.id, f.filename] as const)))
 
@@ -67,12 +85,30 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
 
       <div className="flex gap-6">
         <aside className="sticky top-4 flex h-fit max-h-[calc(100vh-2rem)] w-72 shrink-0 flex-col gap-4 overflow-y-auto">
-          <ReviewControls owner={owner} repo={repo} number={number} hasReview={record != null} onReview={setRecord} />
+          <ReviewControls
+            owner={owner}
+            repo={repo}
+            number={number}
+            hasReview={reviews.some((r) => r.current && r.trust === "mine")}
+            updateFrom={updatableReview(reviews)}
+            onReview={addReview}
+          />
           {record && <Walkthrough review={record.review} onSelectHunk={selectHunk} />}
+          {reviews.length > 1 && (
+            <ReviewList reviews={reviews} selectedId={record?.id ?? null} onSelect={(r) => setSelectedId(r.id)} />
+          )}
         </aside>
 
         <div className="min-w-0 flex-1">
-          {record && <ReviewSummary record={record} />}
+          {offer && (
+            <ReviewOffer
+              record={offer}
+              files={files}
+              onUse={() => setSelectedId(offer.id)}
+              onDismiss={() => setOfferDismissed(true)}
+            />
+          )}
+          {record && <ReviewSummary record={record} files={files} />}
           <div className="flex flex-col gap-4">
             {files.map((file) => (
               <FileDiffCard key={file.filename} file={file} assessments={record?.review.hunks} />
@@ -83,3 +119,5 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
     </Layout>
   )
 }
+
+const trustRank = (r: ReviewRecord) => ({ mine: 0, trusted: 1, other: 2 })[r.trust]

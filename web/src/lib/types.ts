@@ -112,7 +112,21 @@ export type ReviewRecord = {
   head_sha: string
   created_at: number
   requested_by: { login: string; avatar_url: string | null }
+  /** Covers the pull request's current base and head commits. */
+  current: boolean
+  trust: "mine" | "trusted" | "other"
+  /** The viewer chose to see this requester's reviews without being asked. */
+  auto_load: boolean
+  /** The pull request's author requested this review of their own change. */
+  requested_by_author: boolean
+  updated_from: { login: string; head_sha: string } | null
   review: GuidedReview
+}
+
+// Mirrors api/src/trust.
+export type TrustedReviewer = {
+  login: string
+  auto_load: boolean
 }
 
 export type ReviewProgress =

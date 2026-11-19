@@ -9,6 +9,7 @@ mod pulls;
 mod reviews;
 mod source;
 mod state;
+mod trust;
 mod vault;
 
 use std::path::Path;
@@ -53,7 +54,8 @@ async fn main() -> anyhow::Result<()> {
         .merge(pulls::routes())
         .merge(reviews::routes())
         .merge(inference::routes())
-        .merge(vault::routes());
+        .merge(vault::routes())
+        .merge(trust::routes());
 
     let index = Path::new(&config.web_dir).join("index.html");
     let app = Router::new()
