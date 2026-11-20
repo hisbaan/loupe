@@ -1,8 +1,8 @@
 name: Gateway binaries
 
-# Builds loupe-gateway for macOS (Apple Silicon) and Linux (x86-64) and
-# uploads the archives and SHA256SUMS to the release. Runs when a release is
-# published, or manually: choose the release's tag under "Use workflow from".
+# Builds loupe-gateway for macOS (Apple Silicon) and Linux (x86-64). When a
+# release is published, the archives and SHA256SUMS are uploaded to it. Run by
+# hand, it only builds: download the archives from the run's artifacts.
 
 on:
   release:
@@ -52,6 +52,7 @@ jobs:
   upload:
     name: Upload to release
     needs: build
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

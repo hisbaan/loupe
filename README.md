@@ -46,6 +46,6 @@ make test && make lint
 
 ### Releasing
 
-Publish a GitHub release (e.g. tag `v0.2.0`). That builds and publishes the Docker image to `ghcr.io/hisbaan/loupe` and uploads `loupe-gateway` binaries for macOS (Apple Silicon) and Linux (x86-64) with a `SHA256SUMS` file to the release. Bump `version` in [`gateway/Cargo.toml`](gateway/Cargo.toml) first so `loupe-gateway --version` matches. Both workflows can also be run by hand from the Actions tab: pick the release's tag under "Use workflow from".
+Publish a GitHub release (e.g. tag `v0.2.0`). That builds and publishes the Docker image to `ghcr.io/hisbaan/loupe` and uploads `loupe-gateway` binaries for macOS (Apple Silicon) and Linux (x86-64) with a `SHA256SUMS` file to the release. Bump `version` in [`gateway/Cargo.toml`](gateway/Cargo.toml) first so `loupe-gateway --version` matches. Both workflows can also be run by hand from the Actions tab: the image workflow publishes `canary` from `main` (or the version tags from a release tag), and the gateway workflow only builds, leaving the binaries as artifacts on the run.
 
 Then update the formula in [hisbaan/homebrew-tap](https://github.com/hisbaan/homebrew-tap) with the new version, the macOS archive's URL and its checksum from `SHA256SUMS`.
