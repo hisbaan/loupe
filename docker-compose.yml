@@ -7,9 +7,6 @@ services:
       dockerfile: api/Dockerfile
     restart: unless-stopped
     env_file: .env
-    environment:
-      LOUPE_WEB_DIR: /web
-      LOUPE_DATABASE_URL: sqlite:///data/loupe.db
     ports:
       - 3000:3000
     volumes:
