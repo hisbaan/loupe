@@ -18,11 +18,15 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
   const [result, setResult] = useState<ApiResult<PullResponse> | null>(null)
   // null: follow the default for the pull request (self-review for drafts).
   const [chosenMode, setMode] = useState<Mode | null>(null)
+  const [installUrl, setInstallUrl] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     api.pull(owner, repo, number).then((r) => {
       if (!cancelled) setResult(r)
+    })
+    api.config().then((r) => {
+      if (!cancelled && r.ok) setInstallUrl(r.data.install_url)
     })
     return () => {
       cancelled = true
@@ -31,13 +35,27 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
 
   if (!result) return <Layout>Loading…</Layout>
   if (!result.ok) {
-    const message =
-      result.status === 401
-        ? "Sign in to view this pull request."
-        : result.status === 404
-          ? "Pull request not found, or you don't have access to it."
-          : result.error
-    return <Layout>{message}</Layout>
+    if (result.status === 404) {
+      return (
+        <Layout>
+          <p>Pull request not found, or you don't have access to it.</p>
+          <p className="mt-2 text-sm text-neutral-500">
+            For a private repository, Loupe's GitHub App also has to be installed on the account or organization that
+            owns it.
+            {installUrl && (
+              <>
+                {" "}
+                <a href={installUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+                  Install it
+                </a>
+                .
+              </>
+            )}
+          </p>
+        </Layout>
+      )
+    }
+    return <Layout>{result.status === 401 ? "Sign in to view this pull request." : result.error}</Layout>
   }
 
   const { pull, files, truncated } = result.data

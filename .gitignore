@@ -10,3 +10,7 @@ bin/
 *.db
 *.db-shm
 *.db-wal
+
+# nix build output
+result
+result-*

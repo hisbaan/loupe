@@ -401,8 +401,7 @@ mod tests {
             database_url: String::new(),
             web_dir: String::new(),
             secret_key: [0; 32],
-            github_client_id: String::new(),
-            github_client_secret: String::new(),
+            github: None,
             openai_base_url: String::new(),
         };
         let app = Router::new()

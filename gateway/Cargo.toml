@@ -1,6 +1,8 @@
 [package]
 name = "loupe-gateway"
 version = "0.1.0"
+description = "Sign in with ChatGPT for Loupe, run on your own machine"
+repository = "https://github.com/hisbaan/loupe"
 edition.workspace = true
 license.workspace = true
 publish.workspace = true

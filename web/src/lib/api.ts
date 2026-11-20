@@ -1,5 +1,6 @@
 import type {
   ChatGptTokens,
+  ClientConfig,
   Credential,
   JobProgress,
   Me,
@@ -68,6 +69,11 @@ async function readEvents(res: Response, onEvent: (data: string) => void) {
 }
 
 export const api = {
+  config: () => request<ClientConfig>("/config"),
+  setupManifest: (body: { token: string; name: string; organization: string | null; public: boolean }) =>
+    request<{ action: string; manifest: string }>("/setup/manifest", postJson(body)),
+  setupConvert: (body: { token: string; code: string; state: string }) =>
+    request<{ env: string; app_url: string; install_url: string }>("/setup/convert", postJson(body)),
   me: () => request<Me>("/me"),
   pull: (owner: string, repo: string, number: number) => request<PullResponse>(pullPath(owner, repo, number)),
   reviews: (owner: string, repo: string, number: number) =>

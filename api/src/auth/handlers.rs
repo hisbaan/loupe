@@ -29,16 +29,17 @@ fn cookie(state: &AppState, name: &'static str, value: String, max_age: Duration
         .build()
 }
 
-pub async fn login(State(state): State<AppState>, jar: CookieJar) -> impl IntoResponse {
+pub async fn login(State(state): State<AppState>, jar: CookieJar) -> AppResult<impl IntoResponse> {
+    let app = state.config.github()?;
     let oauth_state = random_token();
     let mut url = url::Url::parse("https://github.com/login/oauth/authorize").expect("static url");
     url.query_pairs_mut()
-        .append_pair("client_id", &state.config.github_client_id)
+        .append_pair("client_id", &app.client_id)
         .append_pair("redirect_uri", &callback_url(&state))
         .append_pair("state", &oauth_state);
 
     let jar = jar.add(cookie(&state, OAUTH_STATE_COOKIE, oauth_state, Duration::minutes(10)));
-    (jar, Redirect::to(url.as_str()))
+    Ok((jar, Redirect::to(url.as_str())))
 }
 
 #[derive(Deserialize)]

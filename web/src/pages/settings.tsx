@@ -7,6 +7,8 @@ import { timeAgo } from "@/lib/utils"
 import { currentLogin, passphraseProblem, useVault, vault, type VaultContents } from "@/lib/vault/store"
 import type { TrustedReviewer, VaultKeyRecord } from "@/lib/types"
 
+const REPO_URL = "https://github.com/hisbaan/loupe"
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
@@ -166,9 +168,25 @@ function ChatGptSection({ contents }: { contents: VaultContents }) {
           </button>
         </div>
       ) : (
-        <div className="text-sm text-neutral-500">
-          <p>Use your ChatGPT plan for reviews. Run this on your computer and sign in when your browser opens:</p>
-          <pre className="mt-2 overflow-x-auto rounded-md bg-neutral-100 px-3 py-2 font-mono text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100">
+        <div className="flex flex-col gap-2 text-sm text-neutral-500">
+          <p>
+            Use your ChatGPT plan for reviews. Sign-in runs on your own computer with{" "}
+            <code className="font-mono">loupe-gateway</code>, so your ChatGPT tokens never pass through this server
+            unencrypted. Install it:
+          </p>
+          <ul className="list-disc pl-5">
+            <li>
+              Homebrew: <code className="font-mono">brew install hisbaan/tap/loupe-gateway</code>
+            </li>
+            <li>
+              Cargo: <code className="font-mono">cargo install --git {REPO_URL} loupe-gateway --locked</code>
+            </li>
+            <li>
+              Nix: <code className="font-mono">nix run github:hisbaan/loupe#gateway --</code>
+            </li>
+          </ul>
+          <p>Then run this and sign in when your browser opens:</p>
+          <pre className="overflow-x-auto rounded-md bg-neutral-100 px-3 py-2 font-mono text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100">
             {command}
           </pre>
         </div>

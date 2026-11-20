@@ -1,5 +1,11 @@
 // Mirrors api/src/pulls and api/src/auth response shapes.
 
+// Mirrors api/src/setup.
+export type ClientConfig = {
+  github_configured: boolean
+  install_url: string | null
+}
+
 export type Me = {
   login: string
   avatar_url: string | null

@@ -13,7 +13,7 @@ help:
 	@echo "  make test               Run Rust tests"
 	@echo "  make lint               cargo clippy + oxlint"
 	@echo "  make fmt                cargo fmt"
-	@echo "  make docker             Build the server image (api + web)"
+	@echo "  make docker             Build the Docker image (api + web)"
 	@echo "  make clean              Clean build artifacts"
 
 dev:

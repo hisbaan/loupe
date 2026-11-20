@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { Layout } from "@/components/layout"
+import { Link } from "@/components/link"
 import { api } from "@/lib/api"
 import { navigate } from "@/lib/router"
 import type { Me } from "@/lib/types"
@@ -8,11 +9,13 @@ const PR_URL = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/
 
 export function HomePage() {
   const [me, setMe] = useState<Me | null | undefined>(undefined)
+  const [configured, setConfigured] = useState(true)
   const [url, setUrl] = useState("")
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     api.me().then((result) => setMe(result.ok ? result.data : null))
+    api.config().then((result) => result.ok && setConfigured(result.data.github_configured))
   }, [])
 
   function openPull(event: FormEvent) {
@@ -26,6 +29,23 @@ export function HomePage() {
   }
 
   if (me === undefined) return <Layout>{null}</Layout>
+
+  if (me === null && !configured) {
+    return (
+      <Layout>
+        <div className="mx-auto mt-24 max-w-md text-center">
+          <h1 className="text-2xl font-semibold">Loupe isn't set up yet</h1>
+          <p className="mt-2 text-neutral-500">
+            It needs a GitHub App before anyone can sign in. If you run this server,{" "}
+            <Link href="/setup" className="text-blue-600 hover:underline dark:text-blue-400">
+              finish setup
+            </Link>{" "}
+            with the token from its log.
+          </p>
+        </div>
+      </Layout>
+    )
+  }
 
   if (me === null) {
     return (

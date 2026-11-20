@@ -57,11 +57,12 @@ async fn request_token(state: &AppState, form: &[(&str, &str)]) -> AppResult<Tok
 }
 
 pub async fn exchange_code(state: &AppState, code: &str, redirect_uri: &str) -> AppResult<TokenResponse> {
+    let app = state.config.github()?;
     request_token(
         state,
         &[
-            ("client_id", &state.config.github_client_id),
-            ("client_secret", &state.config.github_client_secret),
+            ("client_id", &app.client_id),
+            ("client_secret", &app.client_secret),
             ("code", code),
             ("redirect_uri", redirect_uri),
         ],
@@ -120,11 +121,12 @@ pub async fn user_token(state: &AppState, user_id: i64) -> AppResult<String> {
         state,
         stored.refresh_token_enc.as_deref().ok_or(AppError::Unauthorized)?,
     )?;
+    let app = state.config.github()?;
     let tokens = request_token(
         state,
         &[
-            ("client_id", &state.config.github_client_id),
-            ("client_secret", &state.config.github_client_secret),
+            ("client_id", &app.client_id),
+            ("client_secret", &app.client_secret),
             ("grant_type", "refresh_token"),
             ("refresh_token", &refresh_token),
         ],

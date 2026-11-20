@@ -7,6 +7,7 @@ mod inference;
 mod prepass;
 mod pulls;
 mod reviews;
+mod setup;
 mod source;
 mod state;
 mod trust;
@@ -55,7 +56,8 @@ async fn main() -> anyhow::Result<()> {
         .merge(reviews::routes())
         .merge(inference::routes())
         .merge(vault::routes())
-        .merge(trust::routes());
+        .merge(trust::routes())
+        .merge(setup::routes());
 
     let index = Path::new(&config.web_dir).join("index.html");
     let app = Router::new()
@@ -63,7 +65,15 @@ async fn main() -> anyhow::Result<()> {
         .nest("/auth", auth::routes())
         .fallback_service(ServeDir::new(&config.web_dir).fallback(ServeFile::new(index)))
         .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .with_state(state.clone());
+
+    if let Some(setup) = &state.setup {
+        tracing::warn!(
+            "Loupe isn't connected to GitHub yet. Open {}/setup and enter this setup token: {}",
+            config.public_url,
+            setup.token()
+        );
+    }
 
     let listener = tokio::net::TcpListener::bind(&config.addr).await?;
     tracing::info!("listening on {}", config.addr);

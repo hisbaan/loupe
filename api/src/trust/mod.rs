@@ -41,7 +41,7 @@ pub async fn trusted_by(db: &sqlx::SqlitePool, user_id: i64) -> AppResult<Vec<Tr
 }
 
 /// GitHub logins: alphanumerics and single hyphens, at most 39 characters.
-fn valid_login(login: &str) -> bool {
+pub fn valid_login(login: &str) -> bool {
     !login.is_empty()
         && login.len() <= 39
         && login.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')

@@ -1,0 +1,68 @@
+name: Gateway binaries
+
+# Builds loupe-gateway for macOS (Apple Silicon) and Linux (x86-64) and
+# uploads the archives and SHA256SUMS to the release. Runs when a release is
+# published, or manually: choose the release's tag under "Use workflow from".
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.release.tag_name || github.ref_name }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Build
+        run: |
+          rustup target add ${{ matrix.target }}
+          cargo build --release --locked -p loupe-gateway --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          name="loupe-gateway-$TAG-${{ matrix.target }}"
+          mkdir "$name"
+          cp "target/${{ matrix.target }}/release/loupe-gateway" LICENSE "$name/"
+          tar czf "$name.tar.gz" "$name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: "*.tar.gz"
+
+  upload:
+    name: Upload to release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Upload archives and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum -- *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+          # --clobber so re-running replaces earlier uploads.
+          gh release upload "$TAG" ./*.tar.gz SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"

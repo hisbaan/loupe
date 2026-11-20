@@ -13,6 +13,8 @@ pub enum AppError {
     BadRequest(String),
     #[error("not found")]
     NotFound,
+    #[error("Loupe isn't connected to GitHub yet; an admin needs to finish setup")]
+    NotConfigured,
     #[error("{0}")]
     Conflict(String),
     /// Something the client holds has expired for good, e.g. a revoked grant.
@@ -42,6 +44,7 @@ impl IntoResponse for AppError {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::NotFound => StatusCode::NOT_FOUND,
+            Self::NotConfigured => StatusCode::SERVICE_UNAVAILABLE,
             Self::Conflict(_) => StatusCode::CONFLICT,
             Self::Gone(_) => StatusCode::GONE,
             // A 404 from GitHub with the user's own token is also how missing
