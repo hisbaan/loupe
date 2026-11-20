@@ -6,7 +6,7 @@
 //! from a reviewer, while a false "code" just costs a little attention. When in
 //! doubt, classify as [`HunkKind::Code`].
 
-mod hunks;
+pub mod hunks;
 mod imports;
 mod lockfile;
 mod paths;

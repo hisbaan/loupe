@@ -81,5 +81,7 @@ Cache keys:
    - [ ] Org-level default trusted reviewers.
    - [ ] Re-review only changed files' context when updating (today the whole PR's file list and description are resent).
 7. [x] Mermaid diagrams: lazy-loaded `mermaid` (strict security level, SVG text labels, `secure` keys so `%%{init}%%` can't loosen them), rendered as an `<img>` data URL so the SVG can never script the page; source shown on parse failure. Diagrams sit under the summary; walkthrough steps link to them.
-8. [ ] Self-review mode + markdown export.
+8. [x] Self-review (`api/src/reviews/self_review/`, `web/src/components/self-review.tsx`): a problem-finding prompt over line-numbered hunks; findings validated against hunk line ranges; private to the requester; accept / edit / dismiss plus your own comments via the diff gutter (stored as client-owned `notes_json`); markdown export pinned to the head SHA with path:line ranges and snippets (`web/src/lib/self-review.ts`). Defaults to the self-review tab on draft pull requests. Shared generation plumbing moved to `api/src/reviews/job.rs`.
+   - [ ] Self-review any `base...head` (compare API), not just pull requests.
+   - [ ] Comment without running the model first.
 9. [ ] Gateway release workflow (cross-platform binaries); GitHub App manifest flow for one-click self-host setup.

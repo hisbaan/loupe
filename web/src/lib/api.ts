@@ -1,11 +1,13 @@
 import type {
   ChatGptTokens,
   Credential,
+  JobProgress,
   Me,
   NewVaultKey,
   PullResponse,
-  ReviewProgress,
   ReviewRecord,
+  SelfReviewNotes,
+  SelfReviewRecord,
   TrustedReviewer,
   VaultKeyRecord,
   VaultRecord,
@@ -90,32 +92,44 @@ export const api = {
   addVaultKey: (key: NewVaultKey) => request<VaultKeyRecord>("/vault/keys", postJson(key)),
   removeVaultKey: (id: number) => request<void>(`/vault/keys/${id}`, { method: "DELETE" }),
 
-  /** Starts a review and reports progress until it finishes or fails. */
-  async generateReview(
+  /** Starts a guided review and reports progress until it finishes or fails. */
+  generateReview: (
     owner: string,
     repo: string,
     number: number,
     body: { credential: Credential; model: string; based_on?: number },
-    onProgress: (progress: ReviewProgress) => void,
-  ) {
-    try {
-      const res = await fetch(`/api${pullPath(owner, repo, number)}/reviews`, {
-        credentials: "same-origin",
-        ...postJson(body),
-      })
-      if (!res.ok) {
-        onProgress({ type: "error", message: await errorMessage(res) })
-        return
-      }
-      let finished = false
-      await readEvents(res, (data) => {
-        const progress = JSON.parse(data) as ReviewProgress
-        finished ||= progress.type === "done" || progress.type === "error"
-        onProgress(progress)
-      })
-      if (!finished) onProgress({ type: "error", message: "The connection closed before the review finished" })
-    } catch (err) {
-      onProgress({ type: "error", message: err instanceof Error ? err.message : "Network error" })
+    onProgress: (progress: JobProgress<ReviewRecord>) => void,
+  ) => runJob(`${pullPath(owner, repo, number)}/reviews`, body, onProgress),
+
+  selfReviews: (owner: string, repo: string, number: number) =>
+    request<{ self_reviews: SelfReviewRecord[] }>(`${pullPath(owner, repo, number)}/self-reviews`),
+  generateSelfReview: (
+    owner: string,
+    repo: string,
+    number: number,
+    body: { credential: Credential; model: string },
+    onProgress: (progress: JobProgress<SelfReviewRecord>) => void,
+  ) => runJob(`${pullPath(owner, repo, number)}/self-reviews`, body, onProgress),
+  saveSelfReviewNotes: (id: number, notes: SelfReviewNotes) =>
+    request<void>(`/self-reviews/${id}/notes`, sendJson("PUT", { notes })),
+}
+
+/** Starts a generation job and reports its progress until it finishes or fails. */
+async function runJob<R>(path: string, body: unknown, onProgress: (progress: JobProgress<R>) => void) {
+  try {
+    const res = await fetch(`/api${path}`, { credentials: "same-origin", ...postJson(body) })
+    if (!res.ok) {
+      onProgress({ type: "error", message: await errorMessage(res) })
+      return
     }
-  },
+    let finished = false
+    await readEvents(res, (data) => {
+      const progress = JSON.parse(data) as JobProgress<R>
+      finished ||= progress.type === "done" || progress.type === "error"
+      onProgress(progress)
+    })
+    if (!finished) onProgress({ type: "error", message: "The connection closed before the job finished" })
+  } catch (err) {
+    onProgress({ type: "error", message: err instanceof Error ? err.message : "Network error" })
+  }
 }

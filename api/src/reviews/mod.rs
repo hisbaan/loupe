@@ -1,42 +1,41 @@
 //! Guided reviews: generation (streamed over SSE) and the shared cache.
 
+mod job;
 mod output;
 mod prompt;
+mod self_review;
 mod tools;
 
-use std::{collections::BTreeMap, convert::Infallible, time::Duration};
+use std::{collections::BTreeMap, convert::Infallible};
 
 use axum::{
     Json, Router,
     extract::{Path, State},
-    response::sse::{Event, KeepAlive, Sse},
+    response::sse::{Event, Sse},
     routing::get,
 };
 use futures_util::Stream;
 use loupe_protocol::review::{GuidedReview, SCHEMA_VERSION};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
-use tokio_stream::{StreamExt, wrappers::ReceiverStream};
 
 use crate::{
     auth::CurrentUser,
     error::{AppError, AppResult},
     github,
-    inference::{self, Credential},
+    inference::Credential,
     pulls::{self, Author, PullResponse},
     source::Source,
     state::AppState,
     trust::{self, Trusted},
 };
 
-/// Model turns per review, including the final answer.
-const MAX_TURNS: usize = 10;
-
 pub fn routes() -> Router<AppState> {
-    Router::new().route(
-        "/repos/{owner}/{repo}/pulls/{number}/reviews",
-        get(list_reviews).post(create_review),
-    )
+    Router::new()
+        .route(
+            "/repos/{owner}/{repo}/pulls/{number}/reviews",
+            get(list_reviews).post(create_review),
+        )
+        .merge(self_review::routes())
 }
 
 #[derive(Serialize)]
@@ -205,15 +204,6 @@ struct CreateReview {
     based_on: Option<i64>,
 }
 
-#[derive(Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum Progress {
-    Status { message: String },
-    Generating { chars: usize },
-    Done { record: Box<ReviewRecord> },
-    Error { message: String },
-}
-
 /// Generates a review and streams progress as server-sent events. The job runs
 /// in its own task so the cache is still filled if the browser goes away.
 async fn create_review(
@@ -227,9 +217,8 @@ async fn create_review(
         return Err(AppError::BadRequest("choose a model".into()));
     }
 
-    let (tx, rx) = mpsc::channel(32);
-    tokio::spawn(async move {
-        let job = Job {
+    Ok(job::stream(move |reporter| async move {
+        Job {
             state,
             user,
             owner,
@@ -238,20 +227,11 @@ async fn create_review(
             model,
             credential: body.credential,
             based_on: body.based_on,
-            tx: tx.clone(),
-        };
-        let progress = match job.run().await {
-            Ok(record) => Progress::Done {
-                record: Box::new(record),
-            },
-            Err(err) => Progress::Error { message: err },
-        };
-        let _ = tx.send(progress).await;
-    });
-
-    let events =
-        ReceiverStream::new(rx).map(|p| Ok(Event::default().data(serde_json::to_string(&p).unwrap_or_default())));
-    Ok(Sse::new(events).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))))
+            reporter,
+        }
+        .run()
+        .await
+    }))
 }
 
 struct Job {
@@ -263,30 +243,15 @@ struct Job {
     model: String,
     credential: Credential,
     based_on: Option<i64>,
-    tx: mpsc::Sender<Progress>,
+    reporter: job::Reporter,
 }
 
 impl Job {
-    async fn status(&self, message: &str) {
-        let _ = self
-            .tx
-            .send(Progress::Status {
-                message: message.into(),
-            })
-            .await;
-    }
-
     /// Errors are returned as messages safe to show the user.
     async fn run(self) -> Result<ReviewRecord, String> {
-        let app_err = |err: AppError| match err {
-            AppError::Internal(_) => {
-                tracing::error!("review job failed: {err:#}");
-                "Something went wrong".to_owned()
-            }
-            other => other.to_string(),
-        };
+        let app_err = job::user_error;
 
-        self.status("Fetching pull request").await;
+        self.reporter.status("Fetching pull request").await;
         let token = github::user_token(&self.state, self.user.id).await.map_err(app_err)?;
         let pr = pulls::fetch_pull(&self.state, &token, &self.owner, &self.repo, self.number)
             .await
@@ -348,61 +313,31 @@ impl Job {
         if previous.is_some() {
             instructions.push_str(prompt::UPDATE_INSTRUCTIONS);
         }
-        let definitions = if use_tools { tools::definitions() } else { Vec::new() };
-        let mut toolbox = tools::Toolbox::new(Source::new(self.state.clone(), token, &pr).map_err(app_err)?);
-        let mut input = vec![inference::user_message(&prompt.input)];
-
-        let raw = 'turns: {
-            for turn_number in 1..=MAX_TURNS {
-                self.status("Generating review").await;
-                let mut last_sent = 0;
-                let turn = inference::respond(
-                    &self.state.http,
-                    &self.state.config.openai_base_url,
-                    &self.credential,
-                    inference::Request {
-                        model: &self.model,
-                        instructions: &instructions,
-                        input: &input,
-                        schema_name: output::SCHEMA_NAME,
-                        schema: output::schema(),
-                        tools: &definitions,
-                        forbid_tools: toolbox.exhausted() || turn_number == MAX_TURNS,
-                    },
-                    |chars| {
-                        if chars - last_sent >= 500 {
-                            last_sent = chars;
-                            // Progress is best-effort; drop it if the browser is slow or gone.
-                            let _ = self.tx.try_send(Progress::Generating { chars });
-                        }
-                    },
-                )
-                .await
-                .map_err(|err| format!("{err:#}"))?;
-
-                let calls: Vec<_> = turn.function_calls().collect();
-                if calls.is_empty() {
-                    break 'turns turn.text;
-                }
-                let mut outputs = Vec::with_capacity(calls.len());
-                for call in calls {
-                    self.status(&tools::Toolbox::<Source>::describe(call.name, call.arguments))
-                        .await;
-                    let result = toolbox.call(call.name, call.arguments).await;
-                    // Repository content is as untrusted as the diff.
-                    let wrapped = format!("<{tag}>\n{result}\n</{tag}>", tag = prompt.tag);
-                    outputs.push(inference::function_output(call.call_id, wrapped));
-                }
-                input.extend(turn.items.iter().cloned());
-                input.extend(outputs);
-            }
-            return Err("The model kept calling tools without finishing the review.".into());
+        let toolbox = match use_tools {
+            true => Some(tools::Toolbox::new(
+                Source::new(self.state.clone(), token, &pr).map_err(app_err)?,
+            )),
+            false => None,
         };
+        let raw = job::Generation {
+            state: &self.state,
+            credential: &self.credential,
+            model: &self.model,
+            reporter: &self.reporter,
+            instructions: &instructions,
+            tag: &prompt.tag,
+            input: &prompt.input,
+            schema_name: output::SCHEMA_NAME,
+            schema: output::schema(),
+            toolbox,
+        }
+        .run()
+        .await?;
 
         let review = output::parse(&raw, &prompt.required_hunks, &carried)
             .map_err(|err| format!("The model's review was invalid: {err}"))?;
 
-        self.status("Saving").await;
+        self.reporter.status("Saving").await;
         let review_json = serde_json::to_string(&review).map_err(|e| app_err(AppError::Internal(e.into())))?;
         let id: i64 = sqlx::query_scalar(
             "INSERT INTO reviews (repo_id, pr_number, base_sha, head_sha, model, prompt_version, schema_version,

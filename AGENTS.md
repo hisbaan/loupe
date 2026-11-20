@@ -7,7 +7,7 @@
 ## Repo Map
 - `api/` Rust server binary (`loupe-api`): axum, SQLite (sqlx), serves the built `web/` bundle. Deployed in Docker.
 - `gateway/` Rust CLI (`loupe-gateway`) that runs on a user's own machine and does "Sign in with ChatGPT". Separate binary from the server on purpose; never merge them.
-- `crates/protocol/` Types shared by both binaries (handoff payload, review schema, hunk ids).
+- `crates/protocol/` Types shared by both binaries (handoff payload, review and self-review schemas, hunk ids).
 - `web/` Vite + React 19 + Tailwind v4 SPA; diffs render with `@pierre/diffs`.
 - Root `Cargo.toml` is the workspace; root `Makefile` + `Procfile` orchestrate (Overmind), same pattern as `../auth`.
 
@@ -41,6 +41,7 @@
 - **Inference credentials**: the server never stores usable inference credentials. ChatGPT/API-key credentials live in a vault encrypted in the browser (vault key wrapped by passkey PRF or PBKDF2 passphrase); the server stores only ciphertext, salts and credential ids, and receives a credential per job, in memory only. The ChatGPT refresh relay (`inference/chatgpt.rs`) sees a refresh token in transit and must never store or log it. The decrypted vault key is never written to browser storage.
 - **Gateway handoff**: tokens go gateway → browser via the URL fragment of `/connect`. Never move them into a query string or a server request.
 - **LLM execution**: the model never triggers code execution on the host. Tools (`api/src/reviews/tools.rs`) are in-process Rust functions doing read-only GitHub API GETs through `source::Source`, pinned to the job's repo and base/head SHAs (not model-controlled; the model picks only side, path and pattern). Paths resolve only through the commit's tree. Regexes use the linear-time `regex` crate with size limits. Calls and output bytes are budgeted. No clones, no subprocesses, no shell.
+- **Self-reviews** (`reviews/self_review/`) are private: every query is scoped to the requesting `user_id`, and listing still re-fetches the pull request with the user's token. Findings must point at lines inside a reviewable hunk (`output::parse`). Generated reviews of any kind go through `reviews/job.rs` (SSE progress, tool loop).
 - **Shared reviews**: trust (`trust/`) only changes what's offered or auto-shown; it never grants access. Incremental updates (`based_on`) may only start from the requester's own or a trusted reviewer's review of the same pull request, and record `based_on` so provenance shows it.
 - **Source cache**: `source_trees`/`source_blobs` are shared across users and keyed by `repo_id`; only build a `Source` from a pull request fetched with the requesting user's token.
 - **Pre-pass** (`api/src/prepass/`): the PR author controls its input. It may only err towards `Code`/not collapsible. Self-declared generated files (marker or name) collapse only if they already existed; whitespace inside a line is never ignored; indentation is significant in Python/YAML/Makefiles; side-effect imports are code; lockfiles from non-registry sources are shown.

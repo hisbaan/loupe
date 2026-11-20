@@ -1,24 +1,26 @@
 import { useState } from "react"
+import { Link } from "@/components/link"
 import { buttonClass, errorMessage, inputClass, linkButtonClass, secondaryButtonClass } from "@/components/ui"
 import { VaultGate } from "@/components/vault-gate"
 import { api } from "@/lib/api"
 import { PROVIDER_LABELS, availableProviders, credentialFor, useInferencePreferences, type Provider } from "@/lib/inference"
-import { Link } from "@/components/link"
-import { shortSha } from "@/lib/reviews"
-import type { ReviewRecord } from "@/lib/types"
+import type { Credential, JobProgress } from "@/lib/types"
 import { useVault, type VaultContents } from "@/lib/vault/store"
 
-type ReviewControlsProps = {
-  owner: string
-  repo: string
-  number: number
-  hasReview: boolean
-  /** An earlier review that can be updated with only the new changes. */
-  updateFrom: ReviewRecord | null
-  onReview: (record: ReviewRecord) => void
+/** One button that starts a generation job (a review, an update, a self-review). */
+export type GenerateAction = {
+  label: string
+  title?: string
+  secondary?: boolean
+  run: (credential: Credential, model: string, onProgress: (progress: JobProgress<unknown>) => void) => Promise<void>
 }
 
-export function ReviewControls(props: ReviewControlsProps) {
+type GenerateControlsProps = {
+  actions: GenerateAction[]
+}
+
+/** Provider and model pickers plus buttons for generation jobs. */
+export function GenerateControls(props: GenerateControlsProps) {
   const state = useVault()
   if (state.status !== "unlocked") return <VaultGate />
   return <Controls {...props} contents={state.contents} />
@@ -26,15 +28,7 @@ export function ReviewControls(props: ReviewControlsProps) {
 
 type RunState = { kind: "idle" } | { kind: "running"; message: string } | { kind: "error"; message: string }
 
-function Controls({
-  owner,
-  repo,
-  number,
-  hasReview,
-  updateFrom,
-  onReview,
-  contents,
-}: ReviewControlsProps & { contents: VaultContents }) {
+function Controls({ actions, contents }: GenerateControlsProps & { contents: VaultContents }) {
   const providers = availableProviders(contents)
   const { provider, model, setProvider, setModel } = useInferencePreferences(providers)
   const [models, setModels] = useState<string[]>([])
@@ -62,7 +56,7 @@ function Controls({
     }
   }
 
-  async function generate(provider: Provider, basedOn?: number) {
+  async function start(action: GenerateAction, provider: Provider) {
     setRun({ kind: "running", message: "Starting" })
     let credential
     try {
@@ -70,17 +64,16 @@ function Controls({
     } catch (err) {
       return setRun({ kind: "error", message: errorMessage(err) })
     }
-    await api.generateReview(owner, repo, number, { credential, model, based_on: basedOn }, (progress) => {
+    await action.run(credential, model, (progress) => {
       switch (progress.type) {
         case "status":
           setRun({ kind: "running", message: progress.message })
           break
         case "generating":
-          setRun({ kind: "running", message: `Generating review (${Math.round(progress.chars / 1000)}k characters)` })
+          setRun({ kind: "running", message: `Generating (${Math.round(progress.chars / 1000)}k characters)` })
           break
         case "done":
           setRun({ kind: "idle" })
-          onReview(progress.record)
           break
         case "error":
           setRun({ kind: "error", message: progress.message })
@@ -121,26 +114,18 @@ function Controls({
           ))}
         </datalist>
       </label>
-      <button
-        type="button"
-        onClick={() => generate(provider)}
-        disabled={run.kind === "running" || !model}
-        className={buttonClass}
-      >
-        {hasReview ? "Regenerate review" : "Generate guided review"}
-      </button>
-      {updateFrom && (
+      {actions.map((action) => (
         <button
+          key={action.label}
           type="button"
-          onClick={() => generate(provider, updateFrom.id)}
+          onClick={() => start(action, provider)}
           disabled={run.kind === "running" || !model}
-          title="Keeps assessments of unchanged hunks and reviews only what's new"
-          className={secondaryButtonClass}
+          title={action.title}
+          className={action.secondary ? secondaryButtonClass : buttonClass}
         >
-          Update {updateFrom.trust === "mine" ? "your" : `@${updateFrom.requested_by.login}'s`} review of{" "}
-          {shortSha(updateFrom.head_sha)}
+          {action.label}
         </button>
-      )}
+      ))}
       {run.kind === "running" && <p className="text-xs text-neutral-500">{run.message}…</p>}
       {run.kind === "error" && <p className="text-xs text-red-600">{run.message}</p>}
     </div>

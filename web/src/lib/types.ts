@@ -129,11 +129,65 @@ export type TrustedReviewer = {
   auto_load: boolean
 }
 
-export type ReviewProgress =
+/** Progress events from a generation job (`api/src/reviews/job.rs`). */
+export type JobProgress<R> =
   | { type: "status"; message: string }
   | { type: "generating"; chars: number }
-  | { type: "done"; record: ReviewRecord }
+  | { type: "done"; record: R }
   | { type: "error"; message: string }
+
+export type ReviewProgress = JobProgress<ReviewRecord>
+
+// Mirrors loupe_protocol::self_review.
+export type Severity = "blocker" | "major" | "minor" | "nit"
+export type LineSide = "new" | "old"
+
+export type Finding = {
+  id: string
+  path: string
+  side: LineSide
+  start_line: number
+  end_line: number
+  severity: Severity
+  title: string
+  body: string
+  suggestion: string | null
+}
+
+export type SelfReview = {
+  schema_version: number
+  summary: string
+  findings: Finding[]
+}
+
+/** Owned by the web client; the server stores it as opaque JSON. */
+export type SelfReviewNotes = {
+  /** Absent means undecided. Dismissed findings are left out of exports. */
+  findings?: Record<string, { status: "accepted" | "dismissed"; body?: string }>
+  comments?: ReviewComment[]
+}
+
+/** The user's own comment on a line range. */
+export type ReviewComment = {
+  id: string
+  path: string
+  side: LineSide
+  start_line: number
+  end_line: number
+  body: string
+}
+
+// Mirrors api/src/reviews/self_review.
+export type SelfReviewRecord = {
+  id: number
+  model: string
+  base_sha: string
+  head_sha: string
+  created_at: number
+  current: boolean
+  review: SelfReview
+  notes: SelfReviewNotes
+}
 
 // Mirrors api/src/inference::Credential: sent with each job, never stored.
 export type Credential = { kind: "api_key"; token: string } | { kind: "chatgpt"; token: string }

@@ -1,6 +1,7 @@
 // Choosing which cached review to show on a pull request.
 
-import type { AnalyzedFile, ReviewRecord } from "@/lib/types"
+import type { DiffLineAnnotation } from "@pierre/diffs"
+import type { AnalyzedFile, HunkAssessment, ReviewRecord } from "@/lib/types"
 
 /** Shown without asking: your own current review, else an auto-load trusted one. */
 export function autoSelected(reviews: ReviewRecord[]): ReviewRecord | null {
@@ -25,3 +26,21 @@ export function coverage(record: ReviewRecord, files: AnalyzedFile[]) {
 }
 
 export const shortSha = (sha: string) => sha.slice(0, 7)
+
+/** One annotation at the top of each assessed hunk. */
+export function assessmentAnnotations(
+  file: AnalyzedFile,
+  assessments: Record<string, HunkAssessment> | undefined,
+): DiffLineAnnotation<HunkAssessment>[] {
+  const annotations: DiffLineAnnotation<HunkAssessment>[] = []
+  for (const hunk of file.analysis.hunks) {
+    const assessment = assessments?.[hunk.id]
+    if (!assessment) continue
+    annotations.push(
+      hunk.new_lines > 0
+        ? { side: "additions", lineNumber: hunk.new_start, metadata: assessment }
+        : { side: "deletions", lineNumber: hunk.old_start, metadata: assessment },
+    )
+  }
+  return annotations
+}
