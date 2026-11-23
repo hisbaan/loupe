@@ -3,6 +3,20 @@ import { Layout } from "@/components/layout"
 import { buttonClass, errorMessage, inputClass, linkButtonClass, secondaryButtonClass } from "@/components/ui"
 import { PassphraseFields, VaultGate } from "@/components/vault-gate"
 import { api } from "@/lib/api"
+import {
+  DARK_THEMES,
+  DIFF_INDICATORS,
+  DIFF_STYLES,
+  HUNK_SEPARATORS,
+  LIGHT_THEMES,
+  LINE_DIFF_TYPES,
+  LINE_HOVER_HIGHLIGHTS,
+  OVERFLOWS,
+  THEME_TYPES,
+  resetDiffSettings,
+  updateDiffSettings,
+  useDiffSettings,
+} from "@/lib/diff-settings"
 import { timeAgo } from "@/lib/utils"
 import { currentLogin, passphraseProblem, useVault, vault, type VaultContents } from "@/lib/vault/store"
 import type { TrustedReviewer, VaultKeyRecord } from "@/lib/types"
@@ -45,6 +59,7 @@ export function SettingsPage() {
     <Layout>
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
         <h1 className="text-2xl font-semibold">Settings</h1>
+        <DiffViewSection />
         {state.status !== "signed_out" && <TrustedSection />}
         <h2 className="mt-2 text-lg font-semibold">Inference credentials</h2>
         {state.status === "unlocked" ? (
@@ -60,6 +75,113 @@ export function SettingsPage() {
         )}
       </div>
     </Layout>
+  )
+}
+
+function SelectRow<T extends string>({
+  label,
+  value,
+  choices,
+  onChange,
+}: {
+  label: string
+  value: T
+  choices: { value: T; label: string }[]
+  onChange: (value: T) => void
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3">
+      <span>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)} className={`${inputClass} w-56`}>
+        {choices.map((c) => (
+          <option key={c.value} value={c.value}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function CheckboxRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      {label}
+    </label>
+  )
+}
+
+const themeChoices = (names: string[]) => names.map((name) => ({ value: name, label: name }))
+
+function DiffViewSection() {
+  const s = useDiffSettings()
+
+  return (
+    <Section title="Diff view">
+      <p className="mb-3 text-sm text-neutral-500">Saved in this browser.</p>
+      <div className="flex flex-col gap-2 text-sm">
+        <SelectRow label="Layout" value={s.diffStyle} choices={DIFF_STYLES} onChange={(diffStyle) => updateDiffSettings({ diffStyle })} />
+        <SelectRow
+          label="Appearance"
+          value={s.themeType}
+          choices={THEME_TYPES}
+          onChange={(themeType) => updateDiffSettings({ themeType })}
+        />
+        <SelectRow
+          label="Light theme"
+          value={s.lightTheme}
+          choices={themeChoices(LIGHT_THEMES)}
+          onChange={(lightTheme) => updateDiffSettings({ lightTheme })}
+        />
+        <SelectRow
+          label="Dark theme"
+          value={s.darkTheme}
+          choices={themeChoices(DARK_THEMES)}
+          onChange={(darkTheme) => updateDiffSettings({ darkTheme })}
+        />
+        <SelectRow label="Long lines" value={s.overflow} choices={OVERFLOWS} onChange={(overflow) => updateDiffSettings({ overflow })} />
+        <SelectRow
+          label="Changes within a line"
+          value={s.lineDiffType}
+          choices={LINE_DIFF_TYPES}
+          onChange={(lineDiffType) => updateDiffSettings({ lineDiffType })}
+        />
+        <SelectRow
+          label="Change markers"
+          value={s.diffIndicators}
+          choices={DIFF_INDICATORS}
+          onChange={(diffIndicators) => updateDiffSettings({ diffIndicators })}
+        />
+        <SelectRow
+          label="Between hunks"
+          value={s.hunkSeparators}
+          choices={HUNK_SEPARATORS}
+          onChange={(hunkSeparators) => updateDiffSettings({ hunkSeparators })}
+        />
+        <SelectRow
+          label="Highlight on hover"
+          value={s.lineHoverHighlight}
+          choices={LINE_HOVER_HIGHLIGHTS}
+          onChange={(lineHoverHighlight) => updateDiffSettings({ lineHoverHighlight })}
+        />
+        <div className="mt-1 flex flex-wrap gap-x-5 gap-y-2">
+          <CheckboxRow label="Line backgrounds" checked={s.backgrounds} onChange={(backgrounds) => updateDiffSettings({ backgrounds })} />
+          <CheckboxRow label="Line numbers" checked={s.lineNumbers} onChange={(lineNumbers) => updateDiffSettings({ lineNumbers })} />
+          <CheckboxRow label="File header" checked={s.fileHeader} onChange={(fileHeader) => updateDiffSettings({ fileHeader })} />
+          <CheckboxRow
+            label="Sticky file header"
+            checked={s.stickyHeader}
+            onChange={(stickyHeader) => updateDiffSettings({ stickyHeader })}
+          />
+        </div>
+        <div>
+          <button type="button" onClick={resetDiffSettings} className={`${linkButtonClass} mt-1`}>
+            Reset to defaults
+          </button>
+        </div>
+      </div>
+    </Section>
   )
 }
 

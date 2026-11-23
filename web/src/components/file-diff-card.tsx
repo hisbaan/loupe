@@ -1,6 +1,7 @@
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs"
 import { PatchDiff } from "@pierre/diffs/react"
 import { useState, type ReactNode } from "react"
+import { diffViewOptions, useDiffSettings } from "@/lib/diff-settings"
 import { KIND_LABELS, planCollapse, toUnifiedPatch } from "@/lib/patch"
 import { fileAnchor } from "@/lib/utils"
 import type { AnalyzedFile } from "@/lib/types"
@@ -15,6 +16,7 @@ type FileDiffCardProps<T> = {
 
 export function FileDiffCard<T>({ file, annotations, renderAnnotation, onAddComment }: FileDiffCardProps<T>) {
   const [expanded, setExpanded] = useState(false)
+  const settings = useDiffSettings()
   const { analysis } = file
   const patch = toUnifiedPatch(file)
   const plan = planCollapse(file)
@@ -68,10 +70,8 @@ export function FileDiffCard<T>({ file, annotations, renderAnnotation, onAddComm
           key={partiallyCollapsed ? "reduced" : "full"}
           patch={partiallyCollapsed ? plan.reducedPatch! : patch}
           options={{
-            diffStyle: "split",
-            themeType: "system",
+            ...diffViewOptions(settings),
             collapsed: wholeFileCollapsed,
-            stickyHeader: true,
             enableGutterUtility: onAddComment != null,
             onGutterUtilityClick: onAddComment,
           }}
