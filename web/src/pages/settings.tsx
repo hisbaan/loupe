@@ -60,6 +60,7 @@ export function SettingsPage() {
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
         <h1 className="text-2xl font-semibold">Settings</h1>
         <DiffViewSection />
+        {state.status !== "signed_out" && <GitHubSection />}
         {state.status !== "signed_out" && <TrustedSection />}
         <h2 className="mt-2 text-lg font-semibold">Inference credentials</h2>
         {state.status === "unlocked" ? (
@@ -180,6 +181,30 @@ function DiffViewSection() {
             Reset to defaults
           </button>
         </div>
+      </div>
+    </Section>
+  )
+}
+
+function GitHubSection() {
+  const [installUrl, setInstallUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    api.config().then((r) => setInstallUrl(r.ok ? r.data.install_url : null))
+  }, [])
+
+  if (!installUrl) return null
+
+  return (
+    <Section title="GitHub">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="text-neutral-500">
+          Loupe lists and opens pull requests in repositories where its GitHub App is installed. Add it to another
+          account or organization, or change which repositories it can see.
+        </span>
+        <a href={installUrl} target="_blank" rel="noreferrer" className={`${secondaryButtonClass} shrink-0`}>
+          Manage installations
+        </a>
       </div>
     </Section>
   )
