@@ -64,6 +64,8 @@ pub struct PullSummary {
 #[derive(Debug, Clone, Serialize)]
 pub struct PullListResponse {
     pub pulls: Vec<PullSummary>,
+    /// Some lookups failed, so pull requests may be missing.
+    pub partial: bool,
 }
 
 /// Each user's last list, served only back to that user.
@@ -177,15 +179,19 @@ pub async fn list(
     }
 
     let token = github::user_token(&state, user.id).await?;
-    let repos = writable_repos(&state, &token)
-        .await
-        .inspect_err(|err| tracing::warn!("listing installed repositories: {err}"))
-        .unwrap_or_default();
+    let (repos, mut partial) = match writable_repos(&state, &token).await {
+        Ok(found) => found,
+        Err(err) => {
+            tracing::warn!("listing installed repositories: {err}");
+            (Vec::new(), true)
+        }
+    };
 
     let (query, variables) = build_query(&repos);
     let response = github::graphql::<BTreeMap<String, Option<Field>>>(&state, &token, &query, variables).await?;
     for error in &response.errors {
         tracing::warn!("listing pull requests: {}", error.message);
+        partial = true;
     }
     let data = response.data.ok_or(AppError::GitHub {
         status: axum::http::StatusCode::BAD_GATEWAY,
@@ -217,8 +223,11 @@ pub async fn list(
     }
     // ISO 8601 timestamps in UTC sort lexically.
     pulls.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    let response = PullListResponse { pulls };
-    state.pull_lists.put(user.id, response.clone());
+    let response = PullListResponse { pulls, partial };
+    // A partial list would otherwise hide the missing pull requests for a minute.
+    if !partial {
+        state.pull_lists.put(user.id, response.clone());
+    }
     Ok(Json(response))
 }
 
@@ -276,14 +285,14 @@ fn build_query(repos: &[(String, String)]) -> (String, Value) {
 }
 
 /// `(owner, name)` of installed, unarchived repositories the user can push
-/// to, most recently pushed first.
-async fn writable_repos(state: &AppState, token: &str) -> AppResult<Vec<(String, String)>> {
+/// to, most recently pushed first, and whether every installation was read.
+async fn writable_repos(state: &AppState, token: &str) -> AppResult<(Vec<(String, String)>, bool)> {
     let installations: Installations = get_json(state, token, "/user/installations?per_page=100").await?;
 
-    let mut repos: Vec<InstallationRepo> =
+    let pages: Vec<AppResult<InstallationRepos>> =
         stream::iter(installations.installations.into_iter().take(MAX_INSTALLATIONS))
             .map(|installation| async move {
-                get_json::<InstallationRepos>(
+                get_json(
                     state,
                     token,
                     &format!("/user/installations/{}/repositories?per_page=100", installation.id),
@@ -291,26 +300,31 @@ async fn writable_repos(state: &AppState, token: &str) -> AppResult<Vec<(String,
                 .await
             })
             .buffer_unordered(CONCURRENCY)
-            .filter_map(|result| async move {
-                result
-                    .inspect_err(|err| tracing::warn!("listing installation repositories: {err}"))
-                    .ok()
-            })
-            .flat_map(|page| stream::iter(page.repositories))
-            .filter(|repo| {
-                let p = repo.permissions.as_ref();
-                let writable = p.is_some_and(|p| p.admin || p.maintain || p.push);
-                std::future::ready(writable && !repo.archived)
-            })
             .collect()
             .await;
+
+    let mut complete = true;
+    let mut repos = Vec::new();
+    for page in pages {
+        match page {
+            Ok(page) => repos.extend(page.repositories.into_iter().filter(|repo| {
+                let p = repo.permissions.as_ref();
+                p.is_some_and(|p| p.admin || p.maintain || p.push) && !repo.archived
+            })),
+            Err(err) => {
+                tracing::warn!("listing installation repositories: {err}");
+                complete = false;
+            }
+        }
+    }
     repos.sort_by(|a, b| b.pushed_at.cmp(&a.pushed_at));
-    Ok(repos
+    let repos = repos
         .into_iter()
         .filter_map(|repo| {
             let (owner, name) = repo.full_name.split_once('/')?;
             (is_github_name(owner) && is_github_name(name)).then(|| (owner.to_owned(), name.to_owned()))
         })
         .take(MAX_REPOS)
-        .collect())
+        .collect();
+    Ok((repos, complete))
 }

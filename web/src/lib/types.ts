@@ -87,6 +87,12 @@ export type PullSummary = {
   reasons: PullReason[]
 }
 
+export type PullListResponse = {
+  pulls: PullSummary[]
+  /** Some lookups failed, so pull requests may be missing. */
+  partial: boolean
+}
+
 export type PullResponse = {
   pull: Pull
   files: AnalyzedFile[]

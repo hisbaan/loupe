@@ -72,13 +72,16 @@ const SECTIONS: { reason: PullReason; title: string }[] = [
 
 function PullList({ installUrl }: { installUrl: string | null }) {
   const [pulls, setPulls] = useState<PullSummary[] | null>(null)
+  const [partial, setPartial] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
 
   useEffect(() => {
     api.pulls().then((result) => {
-      if (result.ok) setPulls(result.data.pulls)
-      else setError(result.error)
+      if (result.ok) {
+        setPulls(result.data.pulls)
+        setPartial(result.data.partial)
+      } else setError(result.error)
     })
   }, [])
 
@@ -101,6 +104,11 @@ function PullList({ installUrl }: { installUrl: string | null }) {
       <OpenPullDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
 
       {error && <p className="mt-6 text-sm text-red-600">{error}</p>}
+      {partial && (
+        <p className="mt-6 text-sm text-amber-600">
+          Some repositories couldn't be loaded from GitHub, so this list may be incomplete.
+        </p>
+      )}
       {!error && pulls === null && <p className="mt-6 text-sm text-neutral-500">Loading…</p>}
       {pulls?.length === 0 && (
         <p className="mt-6 text-sm text-neutral-500">
