@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Layout } from "@/components/layout"
 import { Link } from "@/components/link"
 import { OpenPullDialog } from "@/components/open-pull-dialog"
 import { inputClass, linkButtonClass } from "@/components/ui"
 import { api, type ApiResult } from "@/lib/api"
 import type { Me, PullListResponse, PullReason, PullSummary } from "@/lib/types"
-import { timeAgo } from "@/lib/utils"
+import { cn, timeAgo } from "@/lib/utils"
 
 export function HomePage() {
   const [me, setMe] = useState<Me | null | undefined>(undefined)
@@ -103,6 +103,7 @@ function PullList({ installUrl }: { installUrl: string | null }) {
     api.pulls().then(show)
   }, [])
 
+  const stacks = useMemo(() => findStacks(list?.pulls ?? []), [list])
   const query = filter.trim().toLowerCase()
   const shown = list?.pulls.filter(
     (pull) =>
@@ -193,9 +194,18 @@ function PullList({ installUrl }: { installUrl: string | null }) {
             <section key={reason} className="mt-6">
               <h2 className="text-sm font-medium text-neutral-500">{title}</h2>
               <ul className="mt-2 divide-y divide-neutral-200 rounded-md border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
-                {items.map((pull) => (
-                  <li key={`${pull.repo}#${pull.number}`}>
-                    <PullRow pull={pull} />
+                {groupStacks(items, stacks).map((group) => (
+                  <li key={pullKey(group[0])}>
+                    {group.length > 1 && (
+                      <div className="px-3 pt-2 text-xs text-neutral-500">
+                        Stack of {stacks.get(pullKey(group[0]))!.size} onto {stacks.get(pullKey(group[0]))!.base}
+                      </div>
+                    )}
+                    <div className={cn(group.length > 1 && "ml-3 border-l-2 border-neutral-200 dark:border-neutral-800")}>
+                      {group.map((pull) => (
+                        <PullRow key={pullKey(pull)} pull={pull} stack={stacks.get(pullKey(pull))} />
+                      ))}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -206,7 +216,79 @@ function PullList({ installUrl }: { installUrl: string | null }) {
   )
 }
 
-function PullRow({ pull }: { pull: PullSummary }) {
+type StackPlace = {
+  /** Identifies the stack: its bottom pull request. */
+  id: string
+  /** 1-based, bottom first. */
+  position: number
+  size: number
+  /** The branch the bottom layer targets. */
+  base: string
+}
+
+const pullKey = (pull: PullSummary) => `${pull.repo}#${pull.number}`
+
+/**
+ * Stacks among the listed pull requests: chains in one repository where each
+ * targets the branch of the one below. A branch with several pull requests on
+ * top of it ends the chain, as on the server.
+ */
+function findStacks(pulls: PullSummary[]): Map<string, StackPlace> {
+  const branch = (repo: string, ref: string) => `${repo}:${ref}`
+  const local = pulls.filter((p) => !p.cross_repository)
+  const byHead = new Map(local.map((p) => [branch(p.repo, p.head_ref), p]))
+  const byBase = new Map<string, PullSummary[]>()
+  for (const p of local) byBase.set(branch(p.repo, p.base_ref), [...(byBase.get(branch(p.repo, p.base_ref)) ?? []), p])
+  const above = (p: PullSummary) => {
+    const next = byBase.get(branch(p.repo, p.head_ref))
+    return next?.length === 1 ? next[0] : undefined
+  }
+
+  const places = new Map<string, StackPlace>()
+  for (const start of local) {
+    if (places.has(pullKey(start))) continue
+    let bottom = start
+    const seen = new Set([pullKey(start)])
+    for (;;) {
+      const below = byHead.get(branch(bottom.repo, bottom.base_ref))
+      if (!below || seen.has(pullKey(below)) || above(below) !== bottom) break
+      seen.add(pullKey(below))
+      bottom = below
+    }
+    const chain = [bottom]
+    for (let next = above(bottom); next && !chain.includes(next); next = above(next)) chain.push(next)
+    if (chain.length < 2) continue
+    chain.forEach((p, i) =>
+      places.set(pullKey(p), { id: pullKey(bottom), position: i + 1, size: chain.length, base: bottom.base_ref }),
+    )
+  }
+  return places
+}
+
+/** Puts each stack's pull requests together, top first, where its first one appears. */
+function groupStacks(items: PullSummary[], stacks: Map<string, StackPlace>): PullSummary[][] {
+  const groups: PullSummary[][] = []
+  const byStack = new Map<string, PullSummary[]>()
+  for (const pull of items) {
+    const place = stacks.get(pullKey(pull))
+    if (!place) {
+      groups.push([pull])
+      continue
+    }
+    let group = byStack.get(place.id)
+    if (!group) {
+      group = []
+      byStack.set(place.id, group)
+      groups.push(group)
+    }
+    group.push(pull)
+  }
+  const position = (pull: PullSummary) => stacks.get(pullKey(pull))!.position
+  for (const group of byStack.values()) group.sort((a, b) => position(b) - position(a))
+  return groups
+}
+
+function PullRow({ pull, stack }: { pull: PullSummary; stack?: StackPlace }) {
   return (
     <Link
       href={`/${pull.repo}/pull/${pull.number}`}
@@ -223,6 +305,11 @@ function PullRow({ pull }: { pull: PullSummary }) {
           {pull.draft && (
             <span className="shrink-0 rounded border border-neutral-300 px-1 text-xs text-neutral-500 dark:border-neutral-700">
               Draft
+            </span>
+          )}
+          {stack && (
+            <span className="shrink-0 rounded border border-neutral-300 px-1 text-xs text-neutral-500 dark:border-neutral-700">
+              {stack.position}/{stack.size}
             </span>
           )}
         </div>

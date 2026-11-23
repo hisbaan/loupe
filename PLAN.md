@@ -54,6 +54,8 @@ Cache keys:
 ## Features
 - **Guided review**: walkthrough sidebar drives scroll; low-importance and deterministic hunks are collapsed; rationale as `@pierre/diffs` line annotations.
 - **Mermaid diagrams**: the model adds a flow diagram to a step when useful. Lazy-loaded `mermaid`, strict security level, show source on parse failure.
+- **Review on GitHub from Loupe**: GitHub's review threads inline in the diff, replies, resolve, line comments into your pending review, and submitting comment / approve / request changes, so you never need github.com to review.
+- **Stacks**: stacked pull requests shown as a stack (GitHub's stacks, or branch chains), each layer reviewed on its own with the rest of the stack as context.
 - **Self-review**: draft PRs or any `base...head`. A problem-finding prompt; human comments plus AI suggestions to accept, edit or dismiss; export markdown pinned to head SHA with `path:line` ranges and snippets for a coding agent.
 - **Sharing**: per-user trusted GitHub logins (optional org defaults). Opening a PR with a matching cached review prompts "@alice generated a guided review 2h ago with <model>. Use it / generate my own". Trusted sources can auto-load.
 
@@ -86,3 +88,11 @@ Cache keys:
    - [ ] Comment without running the model first.
 9. [x] Gateway releases (`.github/workflows/gateway-release.yml`, on release published or run by hand): macOS arm64 and Linux x86-64 binaries plus `SHA256SUMS` uploaded to the release; the Homebrew formula lives in hisbaan/homebrew-tap; no code signing. Linux users can `cargo install --git`. Nix flake with `packages.gateway` and a dev shell. First-run GitHub App setup (`api/src/setup/`): without `GITHUB_*` the server logs a one-time setup token and serves `/setup`, which creates the app from a manifest and shows the `.env` lines to paste (nothing stored). README for self-hosting.
    - [ ] Publish `loupe-gateway` to crates.io.
+10. [x] Reviewing from Loupe (`api/src/discussion/`, `web/src/components/conversation.tsx`, `review-panel.tsx`, `review-thread.tsx`): the GitHub App asks for `pull_requests: write` (existing apps change it by hand, see README). Conversation tab with the description, comments, reviews and every thread; threads inline in the guided review's diff, with reply, resolve and edit/delete; gutter comments posted alone or into the user's pending review on GitHub (so a review in progress survives reloads and is shared with github.com); submit as comment / approve / request changes. Writes are pinned to the head SHA on screen. "Open on GitHub" on the page and each file.
+   - [ ] Render comment markdown safely (today it's plain text; GitHub's `bodyHTML` would put third-party HTML on the vault's origin).
+   - [ ] Threads in the self-review diff, and posting accepted self-review findings to GitHub as a review.
+   - [ ] Paginate past 100 comments / reviews / threads (today: a "see the rest on GitHub" notice).
+   - [ ] Request reviewers; merge, auto-merge and the merge queue (needs `contents: write`).
+11. [x] Stacks (`api/src/pulls/stack.rs`, `web/src/components/stack-nav.tsx`): GitHub's stack for a pull request (`GET /repos/{o}/{r}/stacks?pull_request=N`, undocumented, used by `gh stack`), else a chain of open same-repo pull requests by base/head branch. Stack navigator on the pull page; home list groups stacks; the guided review prompt lists the stack (prompt version 4).
+   - [ ] Merge a stack up to a layer (`PUT /pulls/{n}/merge-async`, also undocumented).
+   - [ ] Whole-stack diff (trunk...top) via the compare API.

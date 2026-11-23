@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react"
 import { diffViewOptions, useDiffSettings } from "@/lib/diff-settings"
 import { KIND_LABELS, planCollapse, toUnifiedPatch } from "@/lib/patch"
 import { fileAnchor } from "@/lib/utils"
-import type { AnalyzedFile } from "@/lib/types"
+import type { AnalyzedFile, HunkAnalysis } from "@/lib/types"
 
 type FileDiffCardProps<T> = {
   file: AnalyzedFile
@@ -12,15 +12,23 @@ type FileDiffCardProps<T> = {
   renderAnnotation?: (metadata: T) => ReactNode
   /** Shows a "+" in the gutter to comment on a line or dragged range. */
   onAddComment?: (range: SelectedLineRange) => void
+  /** The file on GitHub. */
+  githubUrl?: string
 }
 
-export function FileDiffCard<T>({ file, annotations, renderAnnotation, onAddComment }: FileDiffCardProps<T>) {
-  const [expanded, setExpanded] = useState(false)
+export function FileDiffCard<T>({ file, annotations, renderAnnotation, onAddComment, githubUrl }: FileDiffCardProps<T>) {
+  const [chosenExpanded, setExpanded] = useState(false)
   const settings = useDiffSettings()
   const { analysis } = file
   const patch = toUnifiedPatch(file)
   const plan = planCollapse(file)
   const notes = analysis.hunks.flatMap((h) => h.notes)
+  // A comment on a collapsed hunk would be invisible, so show everything.
+  const forced =
+    annotations?.some(
+      (a) => analysis.collapsible || analysis.hunks.some((h) => h.collapsible && inHunk(h, a.side, a.lineNumber)),
+    ) ?? false
+  const expanded = chosenExpanded || forced
 
   const wholeFileCollapsed = analysis.collapsible && !expanded
   const partiallyCollapsed = !analysis.collapsible && plan.reducedPatch != null && !expanded
@@ -44,7 +52,7 @@ export function FileDiffCard<T>({ file, annotations, renderAnnotation, onAddComm
             <span className="rounded bg-neutral-200 px-1.5 py-0.5 font-medium dark:bg-neutral-800">{KIND_LABELS[analysis.kind]}</span>
           )}
           {summary && <span className="text-neutral-500">{summary}</span>}
-          {summary && (
+          {summary && !forced && (
             <button type="button" onClick={() => setExpanded((e) => !e)} className="text-blue-600 hover:underline dark:text-blue-400">
               {expanded ? "Hide" : "Show"}
             </button>
@@ -77,8 +85,27 @@ export function FileDiffCard<T>({ file, annotations, renderAnnotation, onAddComm
           }}
           lineAnnotations={annotations}
           renderAnnotation={renderAnnotation && ((annotation) => renderAnnotation(annotation.metadata as T))}
+          renderHeaderMetadata={
+            githubUrl
+              ? () => (
+                  <a
+                    href={githubUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-neutral-500 hover:text-neutral-900 hover:underline dark:hover:text-neutral-100"
+                  >
+                    GitHub ↗
+                  </a>
+                )
+              : undefined
+          }
         />
       )}
     </section>
   )
+}
+
+function inHunk(hunk: HunkAnalysis, side: "additions" | "deletions", line: number) {
+  const [start, count] = side === "additions" ? [hunk.new_start, hunk.new_lines] : [hunk.old_start, hunk.old_lines]
+  return line >= start && line < start + count
 }

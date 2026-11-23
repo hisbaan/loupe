@@ -13,3 +13,7 @@ export const linkButtonClass = "text-blue-600 hover:underline disabled:opacity-5
 export function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
+
+/** A note shown inside the diff, under a line. */
+export const noteClass =
+  "border-y border-neutral-200 bg-white px-3 py-2 font-sans text-sm dark:border-neutral-800 dark:bg-neutral-950"

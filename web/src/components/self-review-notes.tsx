@@ -1,11 +1,9 @@
 import { useState } from "react"
 import { SeverityBadge } from "@/components/severity-badge"
-import { buttonClass, inputClass, linkButtonClass, secondaryButtonClass } from "@/components/ui"
+import { buttonClass, inputClass, linkButtonClass, noteClass as NOTE, secondaryButtonClass } from "@/components/ui"
 import type { FindingStatus } from "@/lib/self-review"
 import { cn } from "@/lib/utils"
 import type { Finding } from "@/lib/types"
-
-const NOTE = "border-y border-neutral-200 bg-white px-3 py-2 font-sans text-sm dark:border-neutral-800 dark:bg-neutral-950"
 
 type FindingNoteProps = {
   finding: Finding

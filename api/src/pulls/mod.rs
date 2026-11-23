@@ -1,8 +1,10 @@
-//! Pull request data for the diff view and the home page list.
+//! Pull request data for the diff view, its stack, and the home page list.
 
 mod list;
+pub mod stack;
 
 pub use list::PullListCache;
+pub use stack::{Stack, fetch_stack};
 
 use axum::{
     Json, Router,
@@ -26,6 +28,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/pulls", get(list::list))
         .route("/repos/{owner}/{repo}/pulls/{number}", get(get_pull))
+        .route("/repos/{owner}/{repo}/pulls/{number}/stack", get(stack::get_stack))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,7 +154,7 @@ async fn get_pull(
 
 /// GitHub owner/repo names: alphanumerics, `-`, `_`, `.`; keeps arbitrary
 /// path segments out of API URLs.
-fn is_github_name(s: &str) -> bool {
+pub(crate) fn is_github_name(s: &str) -> bool {
     !s.is_empty()
         && s != "."
         && s != ".."

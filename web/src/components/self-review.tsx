@@ -7,6 +7,7 @@ import { CommentNote, FindingNote } from "@/components/self-review-notes"
 import { SeverityBadge } from "@/components/severity-badge"
 import { errorMessage, secondaryButtonClass } from "@/components/ui"
 import { api } from "@/lib/api"
+import { lineRange } from "@/lib/discussion"
 import { shortSha } from "@/lib/reviews"
 import {
   SEVERITY_ORDER,
@@ -18,7 +19,7 @@ import {
   setFinding,
   upsertComment,
 } from "@/lib/self-review"
-import { cn, fileAnchor, timeAgo } from "@/lib/utils"
+import { cn, fileAnchor, githubFileUrl, timeAgo } from "@/lib/utils"
 import type { Finding, PullResponse, ReviewComment, SelfReviewNotes, SelfReviewRecord } from "@/lib/types"
 
 type SelfReviewProps = {
@@ -78,15 +79,7 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
 
   function addComment(path: string, range: SelectedLineRange) {
     if (!record?.current) return
-    const [start, end] = range.start <= range.end ? [range.start, range.end] : [range.end, range.start]
-    setDraft({
-      id: crypto.randomUUID(),
-      path,
-      side: range.side === "deletions" ? "old" : "new",
-      start_line: start,
-      end_line: end,
-      body: "",
-    })
+    setDraft({ id: crypto.randomUUID(), path, ...lineRange(range), body: "" })
   }
 
   function annotationsFor(path: string): DiffLineAnnotation<Annotated>[] {
@@ -211,6 +204,7 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
             annotations={annotationsFor(file.filename)}
             renderAnnotation={renderNote}
             onAddComment={record?.current ? (range) => addComment(file.filename, range) : undefined}
+            githubUrl={githubFileUrl(pull, file)}
           />
         ))}
       </div>

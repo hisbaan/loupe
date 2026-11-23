@@ -59,6 +59,12 @@ pub struct PullSummary {
     pub updated_at: String,
     pub html_url: String,
     pub reasons: Vec<Reason>,
+    /// Branches, to group stacked pull requests (each targets the branch of
+    /// the one below it).
+    pub base_ref: String,
+    pub head_ref: String,
+    /// The head branch is in a fork, so it can't be part of a stack.
+    pub cross_repository: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -152,6 +158,9 @@ struct PullNode {
     /// `None` for deleted accounts.
     author: Option<NodeAuthor>,
     repository: NodeRepo,
+    base_ref_name: String,
+    head_ref_name: String,
+    is_cross_repository: bool,
 }
 
 #[derive(Deserialize)]
@@ -251,6 +260,9 @@ fn summary(node: PullNode) -> PullSummary {
         updated_at: node.updated_at,
         html_url: node.url,
         reasons: Vec::new(),
+        base_ref: node.base_ref_name,
+        head_ref: node.head_ref_name,
+        cross_repository: node.is_cross_repository,
     }
 }
 
@@ -279,7 +291,7 @@ fn build_query(repos: &[(String, String)]) -> (String, Value) {
     let query = format!(
         "query({params}) {{\n{fields}}}\n\
          fragment pull on PullRequest {{ number title isDraft updatedAt url \
-         author {{ login avatarUrl }} repository {{ nameWithOwner }} }}"
+         author {{ login avatarUrl }} repository {{ nameWithOwner }} baseRefName headRefName isCrossRepository }}"
     );
     (query, variables)
 }

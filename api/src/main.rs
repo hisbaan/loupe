@@ -1,6 +1,7 @@
 mod auth;
 mod config;
 mod crypto;
+mod discussion;
 mod error;
 mod github;
 mod inference;
@@ -53,6 +54,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(|| async { "ok" }))
         .merge(auth::api_routes())
         .merge(pulls::routes())
+        .merge(discussion::routes())
         .merge(reviews::routes())
         .merge(inference::routes())
         .merge(vault::routes())

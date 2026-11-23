@@ -16,7 +16,8 @@ export function App() {
   if (pathname === "/setup/callback") return <SetupCallbackPage />
 
   const pull = PULL_ROUTE.exec(pathname)
-  if (pull) return <PullPage owner={pull[1]} repo={pull[2]} number={Number(pull[3])} />
+  // Keyed so moving between pull requests (e.g. layers of a stack) starts fresh.
+  if (pull) return <PullPage key={pathname} owner={pull[1]} repo={pull[2]} number={Number(pull[3])} />
 
   return <HomePage />
 }

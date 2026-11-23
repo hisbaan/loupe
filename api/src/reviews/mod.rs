@@ -295,7 +295,15 @@ impl Job {
             carried: &carried,
         });
 
-        let prompt = prompt::build(&pr, previous.as_ref()).map_err(|chars| {
+        // Context only: a review still works without it.
+        let stack = pulls::fetch_stack(&self.state, &token, &self.owner, &self.repo, self.number)
+            .await
+            .unwrap_or_else(|err| {
+                tracing::warn!("reading the pull request's stack: {err}");
+                None
+            });
+
+        let prompt = prompt::build(&pr, previous.as_ref(), stack.as_ref()).map_err(|chars| {
             format!(
                 "This pull request is too large for a single-pass review ({chars} characters of diff, limit {}).",
                 prompt::MAX_INPUT_CHARS

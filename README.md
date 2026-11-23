@@ -3,6 +3,7 @@
 AI-guided GitHub pull request review. Loupe surfaces what matters in a pull request and collapses what doesn't, then walks you through it.
 
 - **Guided review**: a summary, a reading order, importance and concerns on every hunk, and diagrams where the flow is hard to follow.
+- **Review without leaving Loupe**: comment on lines, reply to and resolve threads, and approve or request changes. Stacked pull requests show the whole stack.
 - **Self-review**: problems found in your own draft, pinned to lines. Accept, edit or dismiss them, add your own comments, and export everything as markdown for an agent.
 - **Bring your own model**: sign in with ChatGPT to use your plan, or use an OpenAI API key.
 
@@ -20,7 +21,9 @@ You need Docker, a domain with HTTPS in front of port 3000, and a GitHub account
 1. Copy [`api/.env.example`](api/.env.example) to `.env` next to [`docker-compose.yml`](docker-compose.yml). Set `LOUPE_PUBLIC_URL` to your domain and `LOUPE_SECRET_KEY` to the output of `openssl rand -base64 32`. Leave the `GITHUB_*` lines empty.
 2. `docker compose up -d`, then find the setup token in the log: `docker compose logs loupe | grep "setup token"`.
 3. Open `https://your-domain/setup`, enter the token, and create the GitHub App. GitHub sends you back with three `GITHUB_*` lines: add them to `.env` and `docker compose up -d` again.
-4. Install the app (the setup page links to it) on the accounts and organizations whose **private** repositories you want to review. Public repositories work without installing it.
+4. Install the app (the setup page links to it) on the accounts and organizations whose repositories you want to review. Public repositories can be read without installing it, but commenting and approving from Loupe needs the app installed.
+
+The app reads code (`contents: read`) and writes only to pull requests (`pull_requests: write`), for comments and reviews; every write is something you clicked, made with your own GitHub token. Apps created before reviews could be submitted from Loupe only asked for `pull_requests: read`: in the app's settings on GitHub, under **Permissions & events**, set **Pull requests** to **Read and write**, then accept the new permissions on each installation.
 
 The image is published to `ghcr.io/hisbaan/loupe`: `latest` and version tags on each release, and `canary` when you run the workflow by hand from `main`. It runs read-only, unprivileged and within 256 MB.
 

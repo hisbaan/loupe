@@ -85,6 +85,10 @@ export type PullSummary = {
   updated_at: string
   html_url: string
   reasons: PullReason[]
+  base_ref: string
+  head_ref: string
+  /** The head branch is in a fork, so it can't be part of a stack. */
+  cross_repository: boolean
 }
 
 export type PullListResponse = {
@@ -97,6 +101,97 @@ export type PullResponse = {
   pull: Pull
   files: AnalyzedFile[]
   truncated: boolean
+}
+
+// Mirrors api/src/pulls/stack.rs.
+export type StackLayer = {
+  number: number
+  title: string
+  state: "open" | "closed" | "merged"
+  draft: boolean
+}
+
+export type Stack = {
+  /** GitHub's stack number; null when worked out from branches. */
+  number: number | null
+  /** The branch the bottom layer targets. */
+  base: string
+  /** Bottom first. */
+  layers: StackLayer[]
+}
+
+// Mirrors api/src/discussion. Timestamps are ISO 8601.
+export type Actor = { login: string; avatar_url: string | null }
+
+export type Connection<T> = { total_count: number; nodes: T[] }
+
+export type DiscussionComment = {
+  id: string
+  body: string
+  created_at: string
+  url: string
+  viewer_can_update: boolean
+  viewer_can_delete: boolean
+  /** null for deleted accounts. */
+  author: Actor | null
+  /** Review comments only: "PENDING" while in your unsubmitted review. */
+  state: "PENDING" | "SUBMITTED" | null
+}
+
+export type SubmittedReview = {
+  id: string
+  state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED"
+  body: string
+  submitted_at: string | null
+  url: string
+  author: Actor | null
+  comments: Connection<unknown>
+}
+
+export type ReviewThread = {
+  id: string
+  path: string
+  /** The line in the current diff; null when outdated. */
+  line: number | null
+  start_line: number | null
+  original_line: number | null
+  diff_side: "LEFT" | "RIGHT"
+  is_resolved: boolean
+  is_outdated: boolean
+  viewer_can_resolve: boolean
+  viewer_can_unresolve: boolean
+  viewer_can_reply: boolean
+  comments: Connection<DiscussionComment>
+}
+
+export type Discussion = {
+  head_sha: string
+  viewer_did_author: boolean
+  review_decision: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null
+  locked: boolean
+  /** Your unsubmitted review, started here or on GitHub. */
+  pending_review: { id: string; comments: number } | null
+  /** The conversation, oldest first. */
+  comments: DiscussionComment[]
+  /** Submitted reviews, oldest first. */
+  reviews: SubmittedReview[]
+  threads: ReviewThread[]
+  /** GitHub had more than Loupe fetched. */
+  truncated: boolean
+}
+
+export type ReviewEvent = "comment" | "approve" | "request_changes"
+
+/** A new comment on a line range of the diff. */
+export type LineCommentRequest = {
+  head_sha: string
+  path: string
+  side: LineSide
+  start_line: number
+  end_line: number
+  body: string
+  /** Add to your pending review instead of posting now. */
+  review: boolean
 }
 
 // Mirrors loupe_protocol::review.

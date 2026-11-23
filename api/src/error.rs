@@ -22,6 +22,9 @@ pub enum AppError {
     Gone(String),
     #[error("GitHub returned {status}")]
     GitHub { status: StatusCode },
+    /// GitHub refused a write; `message` is GitHub's, safe to show.
+    #[error("{message}")]
+    GitHubRejected { status: StatusCode, message: String },
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
@@ -51,6 +54,8 @@ impl IntoResponse for AppError {
             // access to a private repo looks, so pass those through.
             Self::GitHub { status } if status.is_client_error() => *status,
             Self::GitHub { .. } => StatusCode::BAD_GATEWAY,
+            Self::GitHubRejected { status, .. } if status.is_client_error() => *status,
+            Self::GitHubRejected { .. } => StatusCode::BAD_GATEWAY,
             Self::Internal(err) => {
                 tracing::error!("internal error: {err:#}");
                 StatusCode::INTERNAL_SERVER_ERROR

@@ -131,10 +131,11 @@ async fn manifest(
         "callback_urls": [format!("{public_url}/auth/github/callback")],
         "public": body.public,
         "request_oauth_on_install": false,
-        // Read-only, and only what reviews need.
+        // Only what reviews need: code is read-only; pull requests are
+        // writable so reviewers can comment, approve and request changes.
         "default_permissions": {
             "contents": "read",
-            "pull_requests": "read",
+            "pull_requests": "write",
             "metadata": "read",
         },
         "default_events": [],
@@ -272,6 +273,7 @@ mod tests {
         );
         assert_eq!(manifest["redirect_url"], "https://loupe.example.com/setup/callback");
         assert_eq!(manifest["default_permissions"]["contents"], "read");
+        assert_eq!(manifest["default_permissions"]["pull_requests"], "write");
 
         // A state that wasn't issued is refused before GitHub is contacted.
         let body = json!({ "token": token, "code": "abc123", "state": "forged" });

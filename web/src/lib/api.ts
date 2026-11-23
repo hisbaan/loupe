@@ -2,7 +2,9 @@ import type {
   ChatGptTokens,
   ClientConfig,
   Credential,
+  Discussion,
   JobProgress,
+  LineCommentRequest,
   Me,
   NewVaultKey,
   PullResponse,
@@ -10,10 +12,15 @@ import type {
   ReviewRecord,
   SelfReviewNotes,
   SelfReviewRecord,
+  Stack,
+  ReviewEvent,
   TrustedReviewer,
   VaultKeyRecord,
   VaultRecord,
 } from "@/lib/types"
+
+/** Conversation comments, or comments in review threads. */
+export type CommentKind = "issue-comments" | "review-comments"
 
 export type ApiResult<T> =
   | { ok: true; status: number; data: T }
@@ -78,6 +85,28 @@ export const api = {
   me: () => request<Me>("/me"),
   pulls: (refresh = false) => request<PullListResponse>(refresh ? "/pulls?refresh=true" : "/pulls"),
   pull: (owner: string, repo: string, number: number) => request<PullResponse>(pullPath(owner, repo, number)),
+  stack: (owner: string, repo: string, number: number) =>
+    request<{ stack: Stack | null }>(`${pullPath(owner, repo, number)}/stack`),
+
+  discussion: (owner: string, repo: string, number: number) =>
+    request<Discussion>(`${pullPath(owner, repo, number)}/discussion`),
+  addComment: (owner: string, repo: string, number: number, body: string) =>
+    request<void>(`${pullPath(owner, repo, number)}/comments`, postJson({ body })),
+  addLineComment: (owner: string, repo: string, number: number, comment: LineCommentRequest) =>
+    request<void>(`${pullPath(owner, repo, number)}/line-comments`, postJson(comment)),
+  /** Submits your review with any pending comments; 409 means new commits were pushed. */
+  submitReview: (owner: string, repo: string, number: number, body: { head_sha: string; event: ReviewEvent; body: string }) =>
+    request<void>(`${pullPath(owner, repo, number)}/review`, postJson(body)),
+  discardReview: (owner: string, repo: string, number: number) =>
+    request<void>(`${pullPath(owner, repo, number)}/review`, { method: "DELETE" }),
+  reply: (threadId: string, body: string) =>
+    request<void>(`/discussion/threads/${encodeURIComponent(threadId)}/replies`, postJson({ body })),
+  setResolved: (threadId: string, resolved: boolean) =>
+    request<void>(`/discussion/threads/${encodeURIComponent(threadId)}/resolved`, sendJson("PUT", { resolved })),
+  editComment: (kind: CommentKind, id: string, body: string) =>
+    request<void>(`/discussion/${kind}/${encodeURIComponent(id)}`, sendJson("PATCH", { body })),
+  deleteComment: (kind: CommentKind, id: string) =>
+    request<void>(`/discussion/${kind}/${encodeURIComponent(id)}`, { method: "DELETE" }),
   reviews: (owner: string, repo: string, number: number) =>
     request<{ reviews: ReviewRecord[] }>(`${pullPath(owner, repo, number)}/reviews`),
   models: (credential: Credential) => request<{ models: string[] }>("/inference/models", postJson({ credential })),
