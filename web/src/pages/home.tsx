@@ -2,9 +2,9 @@ import { useEffect, useState } from "react"
 import { Layout } from "@/components/layout"
 import { Link } from "@/components/link"
 import { OpenPullDialog } from "@/components/open-pull-dialog"
-import { linkButtonClass } from "@/components/ui"
-import { api } from "@/lib/api"
-import type { Me, PullReason, PullSummary } from "@/lib/types"
+import { inputClass, linkButtonClass } from "@/components/ui"
+import { api, type ApiResult } from "@/lib/api"
+import type { Me, PullListResponse, PullReason, PullSummary } from "@/lib/types"
 import { timeAgo } from "@/lib/utils"
 
 export function HomePage() {
@@ -70,31 +70,76 @@ const SECTIONS: { reason: PullReason; title: string }[] = [
   { reason: "maintainer", title: "Open in your repositories" },
 ]
 
+/** The last list, kept for the session so returning home shows it at once. */
+let lastList: PullListResponse | null = null
+
+const iconButtonClass =
+  "rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
+
 function PullList({ installUrl }: { installUrl: string | null }) {
-  const [pulls, setPulls] = useState<PullSummary[] | null>(null)
-  const [partial, setPartial] = useState(false)
+  const [list, setList] = useState<PullListResponse | null>(lastList)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [filter, setFilter] = useState("")
+  const [hideDrafts, setHideDrafts] = useState(false)
 
+  function show(result: ApiResult<PullListResponse>) {
+    if (result.ok) {
+      lastList = result.data
+      setList(result.data)
+      setError(null)
+    } else setError(result.error)
+  }
+
+  async function refresh() {
+    setLoading(true)
+    show(await api.pulls(true))
+    setLoading(false)
+  }
+
+  // Revalidates the session's list; the server caches it briefly too.
   useEffect(() => {
-    api.pulls().then((result) => {
-      if (result.ok) {
-        setPulls(result.data.pulls)
-        setPartial(result.data.partial)
-      } else setError(result.error)
-    })
+    api.pulls().then(show)
   }, [])
+
+  const query = filter.trim().toLowerCase()
+  const shown = list?.pulls.filter(
+    (pull) =>
+      !(hideDrafts && pull.draft) &&
+      (!query ||
+        `${pull.title} ${pull.repo}#${pull.number} ${pull.author.login}`.toLowerCase().includes(query)),
+  )
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Pull requests</h1>
+      <div className="flex items-center gap-1">
+        <h1 className="flex-1 text-lg font-semibold">Pull requests</h1>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={loading}
+          title="Refresh"
+          aria-label="Refresh"
+          className={iconButtonClass}
+        >
+          <svg
+            viewBox="0 0 16 16"
+            className={`size-4 ${loading ? "animate-spin" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          >
+            <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v2.5H11" />
+          </svg>
+        </button>
         <button
           type="button"
           onClick={() => setDialogOpen(true)}
           title="Open a pull request by URL"
           aria-label="Open a pull request by URL"
-          className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
+          className={iconButtonClass}
         >
           <svg viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
             <path d="M8 3v10M3 8h10" />
@@ -103,14 +148,30 @@ function PullList({ installUrl }: { installUrl: string | null }) {
       </div>
       <OpenPullDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
 
+      {list && list.pulls.length > 0 && (
+        <div className="mt-4 flex items-center gap-4">
+          <input
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Filter by title, repository or author"
+            aria-label="Filter pull requests"
+            className={`${inputClass} flex-1 text-sm`}
+          />
+          <label className="flex shrink-0 items-center gap-1.5 text-sm text-neutral-500">
+            <input type="checkbox" checked={hideDrafts} onChange={(event) => setHideDrafts(event.target.checked)} />
+            Hide drafts
+          </label>
+        </div>
+      )}
+
       {error && <p className="mt-6 text-sm text-red-600">{error}</p>}
-      {partial && (
+      {list?.partial && (
         <p className="mt-6 text-sm text-amber-600">
           Some repositories couldn't be loaded from GitHub, so this list may be incomplete.
         </p>
       )}
-      {!error && pulls === null && <p className="mt-6 text-sm text-neutral-500">Loading…</p>}
-      {pulls?.length === 0 && (
+      {!error && list === null && <p className="mt-6 text-sm text-neutral-500">Loading…</p>}
+      {list?.pulls.length === 0 && (
         <p className="mt-6 text-sm text-neutral-500">
           No open pull requests in repositories Loupe can see.{" "}
           {installUrl && (
@@ -121,9 +182,12 @@ function PullList({ installUrl }: { installUrl: string | null }) {
           on more repositories, or use + to open one by URL.
         </p>
       )}
-      {pulls &&
+      {list && list.pulls.length > 0 && shown?.length === 0 && (
+        <p className="mt-6 text-sm text-neutral-500">No pull requests match.</p>
+      )}
+      {shown &&
         SECTIONS.map(({ reason, title }) => {
-          const items = pulls.filter((pull) => pull.reasons[0] === reason)
+          const items = shown.filter((pull) => pull.reasons[0] === reason)
           if (items.length === 0) return null
           return (
             <section key={reason} className="mt-6">

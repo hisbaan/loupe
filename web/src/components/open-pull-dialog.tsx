@@ -3,13 +3,14 @@ import { buttonClass, inputClass, secondaryButtonClass } from "@/components/ui"
 import { navigate } from "@/lib/router"
 
 const PR_URL = /github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/
+const PR_SHORT = /^([\w.-]+)\/([\w.-]+)#(\d+)$/
 
 type OpenPullDialogProps = {
   open: boolean
   onClose: () => void
 }
 
-/** Opens a pull request that isn't in the home page list, by URL. */
+/** Opens a pull request that isn't in the home page list, by URL or `owner/repo#123`. */
 export function OpenPullDialog({ open, onClose }: OpenPullDialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const [url, setUrl] = useState("")
@@ -24,9 +25,9 @@ export function OpenPullDialog({ open, onClose }: OpenPullDialogProps) {
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    const match = PR_URL.exec(url)
+    const match = PR_URL.exec(url) ?? PR_SHORT.exec(url.trim())
     if (!match) {
-      setError("Paste a GitHub pull request URL")
+      setError("Paste a GitHub pull request URL or owner/repo#123")
       return
     }
     onClose()
@@ -50,7 +51,7 @@ export function OpenPullDialog({ open, onClose }: OpenPullDialogProps) {
             setUrl(event.target.value)
             setError(null)
           }}
-          placeholder="https://github.com/owner/repo/pull/123"
+          placeholder="https://github.com/owner/repo/pull/123 or owner/repo#123"
           className={`${inputClass} mt-4 w-full`}
         />
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
