@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use sqlx::SqlitePool;
 
-use crate::{config::Config, crypto::Cipher, setup::SetupState};
+use crate::{config::Config, crypto::Cipher, pulls::PullListCache, setup::SetupState};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -12,6 +12,7 @@ pub struct AppState {
     pub http: reqwest::Client,
     /// Present while the GitHub App hasn't been configured.
     pub setup: Option<Arc<SetupState>>,
+    pub pull_lists: Arc<PullListCache>,
 }
 
 impl AppState {
@@ -28,6 +29,7 @@ impl AppState {
             db,
             cipher: Arc::new(cipher),
             http,
+            pull_lists: Arc::default(),
         }
     }
 }

@@ -50,6 +50,46 @@ pub async fn get_json<T: DeserializeOwned>(state: &AppState, token: &str, path: 
         .await?)
 }
 
+#[derive(Debug, Deserialize)]
+pub struct GraphQlResponse<T> {
+    pub data: Option<T>,
+    /// Fields GitHub couldn't resolve, e.g. an inaccessible repository; those
+    /// come back as `null` in `data` while the rest still resolves.
+    #[serde(default)]
+    pub errors: Vec<GraphQlError>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GraphQlError {
+    pub message: String,
+}
+
+/// A GraphQL query. Pass untrusted values (repository names) as `variables`,
+/// never interpolated into `query`.
+pub async fn graphql<T: DeserializeOwned>(
+    state: &AppState,
+    token: &str,
+    query: &str,
+    variables: serde_json::Value,
+) -> AppResult<GraphQlResponse<T>> {
+    let response = state
+        .http
+        .post(format!("{API_BASE}/graphql"))
+        .bearer_auth(token)
+        .json(&serde_json::json!({ "query": query, "variables": variables }))
+        .send()
+        .await?;
+
+    let status = response.status();
+    if !status.is_success() {
+        tracing::warn!(%status, "GitHub GraphQL request failed");
+        return Err(AppError::GitHub {
+            status: StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
+        });
+    }
+    Ok(response.json().await?)
+}
+
 /// Raw bytes, e.g. of a blob.
 pub async fn get_raw(state: &AppState, token: &str, path: &str) -> AppResult<Vec<u8>> {
     Ok(get(state, token, path, "application/vnd.github.raw+json")

@@ -2,17 +2,30 @@
 //! asked to review, or can merge. Everything is fetched with the user's own
 //! token, and a GitHub App user token only reaches repositories the app is
 //! installed on, so every listed pull request is one Loupe can open.
+//!
+//! The REST API only finds the repositories; one GraphQL query then runs both
+//! searches and lists every repository's open pull requests, instead of a
+//! REST call per repository. Results are cached per user for a minute.
 
-use std::collections::BTreeMap;
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Write as _,
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
-use axum::{Json, extract::State};
+use axum::{
+    Json,
+    extract::{Query, State},
+};
 use futures_util::{StreamExt, stream};
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 
 use super::{Author, is_github_name};
 use crate::{
     auth::CurrentUser,
-    error::AppResult,
+    error::{AppError, AppResult},
     github::{self, get_json},
     state::AppState,
 };
@@ -24,6 +37,7 @@ const MAX_INSTALLATIONS: usize = 10;
 const PULLS_PER_REPO: u32 = 30;
 const SEARCH_RESULTS: u32 = 50;
 const CONCURRENCY: usize = 6;
+const CACHE_TTL: Duration = Duration::from_secs(60);
 
 /// Why a pull request is listed, most relevant first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -34,7 +48,7 @@ pub enum Reason {
     Maintainer,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PullSummary {
     /// `owner/name`.
     pub repo: String,
@@ -47,26 +61,34 @@ pub struct PullSummary {
     pub reasons: Vec<Reason>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PullListResponse {
     pub pulls: Vec<PullSummary>,
 }
 
-#[derive(Deserialize)]
-struct SearchResults {
-    items: Vec<SearchItem>,
+/// Each user's last list, served only back to that user.
+#[derive(Default)]
+pub struct PullListCache(Mutex<HashMap<i64, (Instant, PullListResponse)>>);
+
+impl PullListCache {
+    fn get(&self, user_id: i64) -> Option<PullListResponse> {
+        let cache = self.0.lock().unwrap();
+        let (at, response) = cache.get(&user_id)?;
+        (at.elapsed() < CACHE_TTL).then(|| response.clone())
+    }
+
+    fn put(&self, user_id: i64, response: PullListResponse) {
+        let mut cache = self.0.lock().unwrap();
+        cache.retain(|_, (at, _)| at.elapsed() < CACHE_TTL);
+        cache.insert(user_id, (Instant::now(), response));
+    }
 }
 
 #[derive(Deserialize)]
-struct SearchItem {
-    number: u64,
-    title: String,
-    user: Author,
-    draft: Option<bool>,
-    updated_at: String,
-    html_url: String,
-    /// `https://api.github.com/repos/{owner}/{name}`.
-    repository_url: String,
+pub struct ListParams {
+    /// Skip the cache, e.g. for an explicit refresh.
+    #[serde(default)]
+    refresh: bool,
 }
 
 #[derive(Deserialize)]
@@ -103,50 +125,91 @@ struct Permissions {
     push: bool,
 }
 
+/// A top-level field of the GraphQL response: a search (`nodes`) or a
+/// repository (`pullRequests.nodes`).
 #[derive(Deserialize)]
-struct ListedPull {
-    number: u64,
-    title: String,
-    user: Author,
-    draft: Option<bool>,
-    updated_at: String,
-    html_url: String,
+#[serde(rename_all = "camelCase")]
+struct Field {
+    nodes: Option<Vec<Value>>,
+    pull_requests: Option<Nodes>,
 }
 
-pub async fn list(user: CurrentUser, State(state): State<AppState>) -> AppResult<Json<PullListResponse>> {
-    let token = github::user_token(&state, user.id).await?;
-    let (requested, authored, maintained) = tokio::join!(
-        search(&state, &token, "review-requested:@me", Reason::ReviewRequested),
-        search(&state, &token, "author:@me", Reason::Authored),
-        maintained(&state, &token),
-    );
+#[derive(Deserialize)]
+struct Nodes {
+    nodes: Vec<Value>,
+}
 
-    let mut first_error = None;
-    let mut found = Vec::new();
-    for result in [requested, authored, maintained] {
-        match result {
-            Ok(pulls) => found.extend(pulls),
-            Err(err) => {
-                tracing::warn!("listing pull requests: {err}");
-                first_error.get_or_insert(err);
-            }
-        }
-    }
-    if found.is_empty()
-        && let Some(err) = first_error
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PullNode {
+    number: u64,
+    title: String,
+    is_draft: bool,
+    updated_at: String,
+    url: String,
+    /// `None` for deleted accounts.
+    author: Option<NodeAuthor>,
+    repository: NodeRepo,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NodeAuthor {
+    login: String,
+    avatar_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NodeRepo {
+    name_with_owner: String,
+}
+
+pub async fn list(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Query(params): Query<ListParams>,
+) -> AppResult<Json<PullListResponse>> {
+    if !params.refresh
+        && let Some(cached) = state.pull_lists.get(user.id)
     {
-        return Err(err);
+        return Ok(Json(cached));
     }
+
+    let token = github::user_token(&state, user.id).await?;
+    let repos = writable_repos(&state, &token)
+        .await
+        .inspect_err(|err| tracing::warn!("listing installed repositories: {err}"))
+        .unwrap_or_default();
+
+    let (query, variables) = build_query(&repos);
+    let response = github::graphql::<BTreeMap<String, Option<Field>>>(&state, &token, &query, variables).await?;
+    for error in &response.errors {
+        tracing::warn!("listing pull requests: {}", error.message);
+    }
+    let data = response.data.ok_or(AppError::GitHub {
+        status: axum::http::StatusCode::BAD_GATEWAY,
+    })?;
 
     let mut merged: BTreeMap<(String, u64), PullSummary> = BTreeMap::new();
-    for pull in found {
-        match merged.get_mut(&(pull.repo.clone(), pull.number)) {
-            Some(existing) => existing.reasons.extend(pull.reasons),
-            None => {
-                merged.insert((pull.repo.clone(), pull.number), pull);
-            }
+    for (alias, field) in data {
+        let Some(field) = field else { continue };
+        let reason = match alias.as_str() {
+            "requested" => Reason::ReviewRequested,
+            "authored" => Reason::Authored,
+            _ => Reason::Maintainer,
+        };
+        let nodes = field.nodes.or(field.pull_requests.map(|p| p.nodes)).unwrap_or_default();
+        // Search results that aren't pull requests come back as `{}`.
+        for node in nodes
+            .into_iter()
+            .filter_map(|node| serde_json::from_value::<PullNode>(node).ok())
+        {
+            let key = (node.repository.name_with_owner.clone(), node.number);
+            merged.entry(key).or_insert_with(|| summary(node)).reasons.push(reason);
         }
     }
+
     let mut pulls: Vec<_> = merged.into_values().collect();
     for pull in &mut pulls {
         pull.reasons.sort();
@@ -154,40 +217,67 @@ pub async fn list(user: CurrentUser, State(state): State<AppState>) -> AppResult
     }
     // ISO 8601 timestamps in UTC sort lexically.
     pulls.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    Ok(Json(PullListResponse { pulls }))
+    let response = PullListResponse { pulls };
+    state.pull_lists.put(user.id, response.clone());
+    Ok(Json(response))
 }
 
-async fn search(state: &AppState, token: &str, qualifier: &str, reason: Reason) -> AppResult<Vec<PullSummary>> {
-    let query = format!("is:pr is:open archived:false {qualifier}");
-    let query: String = url::form_urlencoded::byte_serialize(query.as_bytes()).collect();
-    let results: SearchResults = get_json(
-        state,
-        token,
-        &format!("/search/issues?q={query}&sort=updated&order=desc&per_page={SEARCH_RESULTS}"),
-    )
-    .await?;
-    Ok(results
-        .items
-        .into_iter()
-        .filter_map(|item| {
-            let repo = item.repository_url.strip_prefix("https://api.github.com/repos/")?;
-            let repo = is_full_name(repo).then(|| repo.to_owned())?;
-            Some(PullSummary {
-                repo,
-                number: item.number,
-                title: item.title,
-                author: item.user,
-                draft: item.draft.unwrap_or(false),
-                updated_at: item.updated_at,
-                html_url: item.html_url,
-                reasons: vec![reason],
-            })
-        })
-        .collect())
+fn summary(node: PullNode) -> PullSummary {
+    let author = node.author.map_or_else(
+        || Author {
+            login: "ghost".to_owned(),
+            avatar_url: None,
+        },
+        |a| Author {
+            login: a.login,
+            avatar_url: a.avatar_url,
+        },
+    );
+    PullSummary {
+        repo: node.repository.name_with_owner,
+        number: node.number,
+        title: node.title,
+        author,
+        draft: node.is_draft,
+        updated_at: node.updated_at,
+        html_url: node.url,
+        reasons: Vec::new(),
+    }
 }
 
-/// Open pull requests in repositories the user can push to.
-async fn maintained(state: &AppState, token: &str) -> AppResult<Vec<PullSummary>> {
+/// Both searches, plus one aliased `repository` field per repository; names
+/// go in as variables.
+fn build_query(repos: &[(String, String)]) -> (String, Value) {
+    let mut params = String::from("$requested: String!, $authored: String!");
+    let mut fields = format!(
+        "requested: search(query: $requested, type: ISSUE, first: {SEARCH_RESULTS}) {{ nodes {{ ...pull }} }}\n\
+         authored: search(query: $authored, type: ISSUE, first: {SEARCH_RESULTS}) {{ nodes {{ ...pull }} }}\n"
+    );
+    let mut variables = json!({
+        "requested": "is:pr is:open archived:false review-requested:@me",
+        "authored": "is:pr is:open archived:false author:@me",
+    });
+    for (i, (owner, name)) in repos.iter().enumerate() {
+        let _ = write!(params, ", $o{i}: String!, $n{i}: String!");
+        let _ = writeln!(
+            fields,
+            "r{i}: repository(owner: $o{i}, name: $n{i}) {{ pullRequests(states: OPEN, first: {PULLS_PER_REPO}, \
+             orderBy: {{field: UPDATED_AT, direction: DESC}}) {{ nodes {{ ...pull }} }} }}"
+        );
+        variables[format!("o{i}")] = json!(owner);
+        variables[format!("n{i}")] = json!(name);
+    }
+    let query = format!(
+        "query({params}) {{\n{fields}}}\n\
+         fragment pull on PullRequest {{ number title isDraft updatedAt url \
+         author {{ login avatarUrl }} repository {{ nameWithOwner }} }}"
+    );
+    (query, variables)
+}
+
+/// `(owner, name)` of installed, unarchived repositories the user can push
+/// to, most recently pushed first.
+async fn writable_repos(state: &AppState, token: &str) -> AppResult<Vec<(String, String)>> {
     let installations: Installations = get_json(state, token, "/user/installations?per_page=100").await?;
 
     let mut repos: Vec<InstallationRepo> =
@@ -210,47 +300,17 @@ async fn maintained(state: &AppState, token: &str) -> AppResult<Vec<PullSummary>
             .filter(|repo| {
                 let p = repo.permissions.as_ref();
                 let writable = p.is_some_and(|p| p.admin || p.maintain || p.push);
-                std::future::ready(writable && !repo.archived && is_full_name(&repo.full_name))
+                std::future::ready(writable && !repo.archived)
             })
             .collect()
             .await;
     repos.sort_by(|a, b| b.pushed_at.cmp(&a.pushed_at));
-    repos.truncate(MAX_REPOS);
-
-    let pages: Vec<Vec<PullSummary>> = stream::iter(repos)
-        .map(|repo| async move {
-            let path = format!(
-                "/repos/{}/pulls?state=open&sort=updated&direction=desc&per_page={PULLS_PER_REPO}",
-                repo.full_name
-            );
-            match get_json::<Vec<ListedPull>>(state, token, &path).await {
-                Ok(pulls) => pulls
-                    .into_iter()
-                    .map(|pull| PullSummary {
-                        repo: repo.full_name.clone(),
-                        number: pull.number,
-                        title: pull.title,
-                        author: pull.user,
-                        draft: pull.draft.unwrap_or(false),
-                        updated_at: pull.updated_at,
-                        html_url: pull.html_url,
-                        reasons: vec![Reason::Maintainer],
-                    })
-                    .collect(),
-                Err(err) => {
-                    tracing::warn!(repo = repo.full_name, "listing pull requests: {err}");
-                    Vec::new()
-                }
-            }
+    Ok(repos
+        .into_iter()
+        .filter_map(|repo| {
+            let (owner, name) = repo.full_name.split_once('/')?;
+            (is_github_name(owner) && is_github_name(name)).then(|| (owner.to_owned(), name.to_owned()))
         })
-        .buffer_unordered(CONCURRENCY)
-        .collect()
-        .await;
-    Ok(pages.into_iter().flatten().collect())
-}
-
-/// `owner/name`, both valid GitHub names, so it's safe to put in an API path.
-fn is_full_name(s: &str) -> bool {
-    s.split_once('/')
-        .is_some_and(|(owner, name)| is_github_name(owner) && is_github_name(name))
+        .take(MAX_REPOS)
+        .collect())
 }
