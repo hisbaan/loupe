@@ -73,6 +73,20 @@ export type AnalyzedFile = PullFile & {
   analysis: FileAnalysis
 }
 
+// Mirrors pulls::list.
+export type PullReason = "review_requested" | "authored" | "maintainer"
+
+export type PullSummary = {
+  repo: string
+  number: number
+  title: string
+  author: { login: string; avatar_url: string | null }
+  draft: boolean
+  updated_at: string
+  html_url: string
+  reasons: PullReason[]
+}
+
 export type PullResponse = {
   pull: Pull
   files: AnalyzedFile[]

@@ -6,6 +6,7 @@ import type {
   Me,
   NewVaultKey,
   PullResponse,
+  PullSummary,
   ReviewRecord,
   SelfReviewNotes,
   SelfReviewRecord,
@@ -75,6 +76,7 @@ export const api = {
   setupConvert: (body: { token: string; code: string; state: string }) =>
     request<{ env: string; app_url: string; install_url: string }>("/setup/convert", postJson(body)),
   me: () => request<Me>("/me"),
+  pulls: () => request<{ pulls: PullSummary[] }>("/pulls"),
   pull: (owner: string, repo: string, number: number) => request<PullResponse>(pullPath(owner, repo, number)),
   reviews: (owner: string, repo: string, number: number) =>
     request<{ reviews: ReviewRecord[] }>(`${pullPath(owner, repo, number)}/reviews`),

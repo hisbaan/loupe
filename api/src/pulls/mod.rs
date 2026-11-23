@@ -1,4 +1,6 @@
-//! Pull request data for the diff view.
+//! Pull request data for the diff view and the home page list.
+
+mod list;
 
 use axum::{
     Json, Router,
@@ -19,7 +21,9 @@ use crate::{
 const MAX_FILE_PAGES: u32 = 30;
 
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/repos/{owner}/{repo}/pulls/{number}", get(get_pull))
+    Router::new()
+        .route("/pulls", get(list::list))
+        .route("/repos/{owner}/{repo}/pulls/{number}", get(get_pull))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
