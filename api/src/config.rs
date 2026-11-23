@@ -37,9 +37,7 @@ impl Config {
         Ok(Self {
             addr: optional("LOUPE_ADDR", "0.0.0.0:3000"),
             // No default: a wrong one silently breaks GitHub sign-in and cookies.
-            public_url: required("LOUPE_PUBLIC_URL")?
-                .trim_end_matches('/')
-                .to_owned(),
+            public_url: required("LOUPE_PUBLIC_URL")?.trim_end_matches('/').to_owned(),
             database_url: optional("LOUPE_DATABASE_URL", "sqlite://loupe.db"),
             web_dir: optional("LOUPE_WEB_DIR", "../web/dist"),
             secret_key,
