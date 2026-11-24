@@ -15,6 +15,8 @@ export function OpenPullDialog({ open, onClose }: OpenPullDialogProps) {
   const ref = useRef<HTMLDialogElement>(null)
   const [url, setUrl] = useState("")
   const [error, setError] = useState<string | null>(null)
+  // Whether the press began on the backdrop, so a drag out of the input doesn't close it.
+  const pressedBackdrop = useRef(false)
 
   useEffect(() => {
     const dialog = ref.current
@@ -38,7 +40,8 @@ export function OpenPullDialog({ open, onClose }: OpenPullDialogProps) {
     <dialog
       ref={ref}
       onClose={onClose}
-      onClick={(event) => event.target === ref.current && onClose()}
+      onPointerDown={(event) => (pressedBackdrop.current = event.target === ref.current)}
+      onClick={(event) => event.target === ref.current && pressedBackdrop.current && onClose()}
       className="m-auto w-full max-w-lg rounded-lg border border-neutral-200 bg-white p-0 text-inherit backdrop:bg-black/40 dark:border-neutral-800 dark:bg-neutral-950"
     >
       <form onSubmit={submit} className="p-5">

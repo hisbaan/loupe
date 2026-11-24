@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { buttonClass, inputClass, linkButtonClass, secondaryButtonClass } from "@/components/ui"
 import { api } from "@/lib/api"
 import type { DiscussionState } from "@/lib/discussion"
@@ -30,6 +30,24 @@ export function ReviewPanel({ owner, repo, pull, state }: ReviewPanelProps) {
   const [body, setBody] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on a click outside or Escape; the draft stays for next time.
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false)
+    }
+    document.addEventListener("pointerdown", onPointerDown)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [open])
 
   if (!discussion) return null
   const pending = discussion.pending_review
@@ -57,7 +75,7 @@ export function ReviewPanel({ owner, repo, pull, state }: ReviewPanelProps) {
   }
 
   return (
-    <div className="relative">
+    <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)} className={pending ? buttonClass : secondaryButtonClass}>
         Review{pending ? ` · ${pending.comments} pending` : ""}
       </button>
