@@ -12,3 +12,73 @@ html {
 body {
   @apply bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
 }
+
+/* GitHub markdown, from `components/markdown.tsx`. */
+.markdown {
+  > :first-child {
+    margin-top: 0;
+  }
+  > :last-child {
+    margin-bottom: 0;
+  }
+  :where(p, ul, ol, pre, blockquote, table, .suggestion, h1, h2, h3, h4, h5, h6) {
+    margin-block: 0.5rem;
+  }
+  :where(h1, h2, h3, h4, h5, h6) {
+    @apply font-semibold;
+  }
+  h1 {
+    @apply text-lg;
+  }
+  h2 {
+    @apply text-base;
+  }
+  ul {
+    @apply list-disc pl-6;
+  }
+  ol {
+    @apply list-decimal pl-6;
+  }
+  li:has(> input[type="checkbox"]) {
+    @apply list-none;
+  }
+  li > input[type="checkbox"] {
+    @apply mr-1.5 -ml-5 align-middle;
+  }
+  a {
+    @apply text-blue-600 hover:underline dark:text-blue-400;
+  }
+  blockquote {
+    @apply border-l-4 border-neutral-300 pl-3 text-neutral-500 dark:border-neutral-700;
+  }
+  code {
+    @apply rounded bg-neutral-100 px-1 py-0.5 font-mono text-[0.85em] dark:bg-neutral-800;
+  }
+  pre {
+    @apply overflow-x-auto rounded-md bg-neutral-100 p-3 font-mono text-xs dark:bg-neutral-900;
+  }
+  pre code {
+    @apply bg-transparent p-0 text-[1em];
+  }
+  table {
+    @apply block overflow-x-auto;
+  }
+  :where(th, td) {
+    @apply border border-neutral-200 px-2 py-1 dark:border-neutral-800;
+  }
+  hr {
+    @apply my-3 border-neutral-200 dark:border-neutral-800;
+  }
+  img {
+    @apply inline max-w-full;
+  }
+  .suggestion {
+    @apply overflow-hidden rounded-md border border-neutral-200 dark:border-neutral-800;
+  }
+  .suggestion-label {
+    @apply border-b border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900;
+  }
+  .suggestion pre {
+    @apply my-0 rounded-none bg-green-50 dark:bg-green-950/40;
+  }
+}

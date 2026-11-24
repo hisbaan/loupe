@@ -1,4 +1,5 @@
 import { Avatar, CommentBox, CommentView } from "@/components/discussion-comment"
+import { Markdown } from "@/components/markdown"
 import { ThreadView } from "@/components/review-thread"
 import { linkButtonClass } from "@/components/ui"
 import { api } from "@/lib/api"
@@ -64,7 +65,7 @@ export function Conversation({ owner, repo, pull, state, onShowFile }: Conversat
           <span>opened this pull request</span>
         </div>
         {pull.body?.trim() ? (
-          <p className="break-words whitespace-pre-wrap">{pull.body}</p>
+          <Markdown baseUrl={pull.html_url}>{pull.body}</Markdown>
         ) : (
           <p className="text-neutral-500">No description.</p>
         )}
@@ -130,7 +131,11 @@ function ReviewItem({ review }: { review: SubmittedReview }) {
           </span>
         )}
       </div>
-      {review.body.trim() && <p className="mt-2 break-words whitespace-pre-wrap">{review.body}</p>}
+      {review.body.trim() && (
+        <Markdown baseUrl={review.url} className="mt-2">
+          {review.body}
+        </Markdown>
+      )}
     </section>
   )
 }

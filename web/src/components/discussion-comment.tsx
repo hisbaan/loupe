@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Markdown } from "@/components/markdown"
 import { buttonClass, inputClass, linkButtonClass, secondaryButtonClass } from "@/components/ui"
 import { api, type CommentKind } from "@/lib/api"
 import { isoTimeAgoSeconds, type DiscussionState } from "@/lib/discussion"
@@ -20,8 +21,8 @@ type CommentViewProps = {
 }
 
 /**
- * A comment from GitHub. Bodies are other people's markdown, shown as plain
- * text: rendering it as HTML on this origin would put the vault key in reach.
+ * A comment from GitHub. Bodies are other people's markdown, rendered only
+ * through `Markdown`: as HTML on this origin it would put the vault key in reach.
  */
 export function CommentView({ comment, kind, write }: CommentViewProps) {
   const [editing, setEditing] = useState(false)
@@ -73,7 +74,9 @@ export function CommentView({ comment, kind, write }: CommentViewProps) {
             </div>
           </div>
         ) : (
-          <p className="mt-0.5 break-words whitespace-pre-wrap">{comment.body}</p>
+          <Markdown baseUrl={comment.url} className="mt-0.5">
+            {comment.body}
+          </Markdown>
         )}
         {!editing && (comment.viewer_can_update || comment.viewer_can_delete) && (
           <div className="mt-1 flex gap-3 text-xs">
