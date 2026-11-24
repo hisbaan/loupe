@@ -75,7 +75,7 @@ Cache keys:
    - [ ] Deduplicate concurrent jobs for the same cache key.
 4. [x] Passkey vault (`api/src/vault/`, `web/src/lib/vault/`): PRF → HKDF wraps a random vault key, passphrase (PBKDF2, 600k) fallback, several keys per vault, compare-and-swap writes. ChatGPT via the gateway handoff into the vault; per-job credentials; refresh relayed by the server (`POST /api/inference/chatgpt/refresh`) and serialised across tabs with Web Locks.
    - [ ] Decided: keep the relay until the milestone 1 CORS test. If `auth.openai.com` accepts browser requests, refresh straight from the browser and delete the relay; if not, keep the relay.
-   - [ ] Optional "stay unlocked in this tab" (non-extractable key in IndexedDB) if re-unlocking after every reload gets tedious.
+   - [x] Stays unlocked on that computer: the vault key is remembered in IndexedDB until lock or sign-out.
 5. [x] Read-only GitHub tools + blob cache: `list_files`, `read_file`, `grep` (`api/src/reviews/tools.rs`) over `api/src/source/` (trees and blobs by SHA, cached in SQLite, pruned after 30 days). Multi-turn function calling with `store: false` (conversation resent each turn, reasoning echoed back encrypted); budgets of 25 calls, 150 KB of tool output and 10 turns; tools disabled above 150k characters of diff.
    - [ ] Verify `include: ["reasoning.encrypted_content"]` and echoed items are accepted under Sign in with ChatGPT and by non-reasoning models (milestone 1).
    - [ ] Show which files the model read in the review's provenance.

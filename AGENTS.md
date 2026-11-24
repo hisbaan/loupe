@@ -35,13 +35,13 @@
 ## Code Style: Web
 - Double quotes, no semicolons, named exports, `type` for props, kebab-case filenames.
 - Imports via `@/` alias. API calls go through `web/src/lib/api.ts` (returns `{ ok, status, data | error }`).
-- In-app links use `Link` (`web/src/components/link.tsx`), not `<a>`: a full page load locks the vault, whose key lives only in memory.
-- Vault: `web/src/lib/vault/` (WebCrypto + WebAuthn PRF, store); get a job's credential with `credentialFor()` in `web/src/lib/inference.ts`.
+- In-app links use `Link` (`web/src/components/link.tsx`), not `<a>`, so navigation keeps loaded state.
+- Vault: `web/src/lib/vault/` (WebCrypto + WebAuthn PRF, store, remembered key); get a job's credential with `credentialFor()` in `web/src/lib/inference.ts`.
 - `web/src/lib/types.ts` mirrors API response shapes; update both sides together.
 
 ## Security Invariants (do not regress)
 - **GitHub access**: every GitHub call uses the requesting user's token (`github::user_token`). Anything cached and shared (reviews, blobs) must be access-checked against the requesting user's GitHub permissions before it is served.
-- **Inference credentials**: the server never stores usable inference credentials. ChatGPT/API-key credentials live in a vault encrypted in the browser (vault key wrapped by passkey PRF or PBKDF2 passphrase); the server stores only ciphertext, salts and credential ids, and receives a credential per job, in memory only. The ChatGPT refresh relay (`inference/chatgpt.rs`) sees a refresh token in transit and must never store or log it. The decrypted vault key is never written to browser storage.
+- **Inference credentials**: the server never stores usable inference credentials. ChatGPT/API-key credentials live in a vault encrypted in the browser (vault key wrapped by passkey PRF or PBKDF2 passphrase); the server stores only ciphertext, salts and credential ids, and receives a credential per job, in memory only. The ChatGPT refresh relay (`inference/chatgpt.rs`) sees a refresh token in transit and must never store or log it. The unlocked vault key may be remembered in the browser's IndexedDB (`web/src/lib/vault/remembered.ts`) so the vault stays unlocked on that computer; it's forgotten on lock, sign-out or when the page loads without a session, and never sent to the server. Decrypted vault contents are never written to browser storage.
 - **Setup** (`setup/`): only active while the GitHub App isn't configured; every step requires the logged one-time token, manifest `state` values are single-use, and the resulting credentials are returned once and never stored.
 - **Gateway handoff**: tokens go gateway → browser via the URL fragment of `/connect`. Never move them into a query string or a server request.
 - **LLM execution**: the model never triggers code execution on the host. Tools (`api/src/reviews/tools.rs`) are in-process Rust functions doing read-only GitHub API GETs through `source::Source`, pinned to the job's repo and base/head SHAs (not model-controlled; the model picks only side, path and pattern). Paths resolve only through the commit's tree. Regexes use the linear-time `regex` crate with size limits. Calls and output bytes are budgeted. No clones, no subprocesses, no shell.

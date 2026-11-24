@@ -75,7 +75,7 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
   const conversationCount = loaded ? loaded.comments.length + loaded.reviews.length + loaded.threads.length : null
 
   async function loadNewCommits() {
-    // In-app, not a page load, which would lock the vault.
+    // In-app, not a page load, which would reload everything.
     setResult(await load())
     await discussion.reload()
   }

@@ -1,6 +1,6 @@
-// The inference credential vault: loaded from the server, unlocked with a
-// passkey or passphrase, and kept decrypted in memory only (never in storage),
-// so reloading the page locks it again.
+// The inference credential vault: loaded from the server and unlocked with a
+// passkey or passphrase. The contents stay decrypted in memory only; the vault
+// key is remembered on this computer (`remembered.ts`) until lock or sign-out.
 
 import { useEffect, useSyncExternalStore } from "react"
 import { api, type ApiResult } from "@/lib/api"
@@ -19,6 +19,7 @@ import {
   wrapVaultKey,
 } from "@/lib/vault/crypto"
 import { createPasskey, evaluatePrf } from "@/lib/vault/passkey"
+import { forgetKey, recallKey, rememberKey } from "@/lib/vault/remembered"
 
 export type ChatGptConnection = ChatGptTokens & { client_id: string }
 
@@ -81,11 +82,37 @@ function unlocked() {
 async function load() {
   if (loading) return
   loading = true
+  try {
+    set(await initialState())
+  } finally {
+    loading = false
+  }
+}
+
+async function initialState(): Promise<VaultState> {
   const result = await api.vault()
-  loading = false
-  if (!result.ok) set(result.status === 401 ? { status: "signed_out" } : { status: "error", message: result.error })
-  else if (!result.data.vault) set({ status: "none" })
-  else set({ status: "locked", record: result.data.vault })
+  if (result.status === 401) {
+    // The session ended (expired, or signed out elsewhere): stay unlocked only while signed in.
+    await forgetKey()
+    return { status: "signed_out" }
+  }
+  if (!result.ok) return { status: "error", message: result.error }
+  const record = result.data.vault
+  if (!record) {
+    await forgetKey()
+    return { status: "none" }
+  }
+  const key = await recallKey()
+  if (key) {
+    try {
+      const contents = await decryptJson<VaultContents>(key, fromBase64Url(record.ciphertext))
+      return { status: "unlocked", record, key, contents }
+    } catch {
+      // Remembered from a vault that has since been replaced.
+      await forgetKey()
+    }
+  }
+  return { status: "locked", record }
 }
 
 export function useVault(): VaultState {
@@ -161,6 +188,7 @@ async function reload(): Promise<VaultContents> {
     return contents
   } catch {
     // Reset and recreated elsewhere with a different key.
+    await forgetKey()
     set({ status: "locked", record })
     throw new Error("The vault was replaced. Unlock it again.")
   }
@@ -176,6 +204,7 @@ export const vault = {
     const key = await generateVaultKey()
     const ciphertext = toBase64Url(await encryptJson(key, EMPTY))
     const { vault: record } = must(await api.createVault({ ciphertext, key: await newKey(key, login, method, label) }))
+    await rememberKey(key)
     set({ status: "unlocked", record, key, contents: EMPTY })
   },
 
@@ -184,11 +213,21 @@ export const vault = {
     const { record } = state
     const key = await unlockKey(record, method)
     const contents = await decryptJson<VaultContents>(key, fromBase64Url(record.ciphertext))
+    await rememberKey(key)
     set({ status: "unlocked", record, key, contents })
   },
 
+  /** Locks the vault and forgets its key on this computer. */
   lock() {
+    void forgetKey()
     if (state.status === "unlocked") set({ status: "locked", record: state.record })
+  },
+
+  /** Forgets the vault key on this computer, then ends the session. */
+  async signOut() {
+    await forgetKey()
+    await fetch("/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {})
+    window.location.assign("/")
   },
 
   reload,
@@ -229,6 +268,7 @@ export const vault = {
   /** Deletes the vault and everything in it. */
   async reset() {
     must(await api.deleteVault())
+    await forgetKey()
     set({ status: "none" })
   },
 }

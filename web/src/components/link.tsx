@@ -1,10 +1,7 @@
 import type { AnchorHTMLAttributes, MouseEvent } from "react"
 import { navigate } from "@/lib/router"
 
-/**
- * An in-app link. Navigating without a page load keeps the vault unlocked, since
- * its key only lives in memory.
- */
+/** An in-app link. Navigating without a page load keeps loaded state, like the decrypted vault. */
 export function Link({ href, onClick, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     onClick?.(event)
