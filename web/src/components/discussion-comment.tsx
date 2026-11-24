@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Markdown } from "@/components/markdown"
-import { buttonClass, inputClass, linkButtonClass, secondaryButtonClass } from "@/components/ui"
+import { buttonClass, ghostButtonClass, inputClass, secondaryButtonClass } from "@/components/ui"
 import { api, type CommentKind } from "@/lib/api"
 import { isoTimeAgoSeconds, type DiscussionState } from "@/lib/discussion"
 import { cn, timeAgo } from "@/lib/utils"
@@ -50,7 +50,7 @@ export function CommentView({ comment, kind, write }: CommentViewProps) {
     <div className="flex gap-2">
       <Avatar actor={comment.author} />
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+        <div className="flex min-h-6 flex-wrap items-center gap-2 text-xs text-neutral-500">
           <span className="font-medium text-neutral-900 dark:text-neutral-100">{comment.author?.login ?? "ghost"}</span>
           <a href={comment.url} target="_blank" rel="noreferrer" className="hover:underline">
             {timeAgo(isoTimeAgoSeconds(comment.created_at))}
@@ -59,6 +59,32 @@ export function CommentView({ comment, kind, write }: CommentViewProps) {
             <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
               Pending
             </span>
+          )}
+          {!editing && (comment.viewer_can_update || comment.viewer_can_delete) && (
+            <div className="ml-auto flex gap-1">
+              {comment.viewer_can_update && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft(comment.body)
+                    setEditing(true)
+                  }}
+                  className={ghostButtonClass}
+                >
+                  Edit
+                </button>
+              )}
+              {comment.viewer_can_delete && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={remove}
+                  className={cn(ghostButtonClass, "hover:text-red-600 dark:hover:text-red-400")}
+                >
+                  Delete
+                </button>
+              )}
+            </div>
           )}
         </div>
         {editing ? (
@@ -77,27 +103,6 @@ export function CommentView({ comment, kind, write }: CommentViewProps) {
           <Markdown baseUrl={comment.url} className="mt-0.5">
             {comment.body}
           </Markdown>
-        )}
-        {!editing && (comment.viewer_can_update || comment.viewer_can_delete) && (
-          <div className="mt-1 flex gap-3 text-xs">
-            {comment.viewer_can_update && (
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft(comment.body)
-                  setEditing(true)
-                }}
-                className={linkButtonClass}
-              >
-                Edit
-              </button>
-            )}
-            {comment.viewer_can_delete && (
-              <button type="button" disabled={busy} onClick={remove} className={linkButtonClass}>
-                Delete
-              </button>
-            )}
-          </div>
         )}
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </div>

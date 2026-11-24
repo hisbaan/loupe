@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { CommentBox, CommentView, type CommentAction } from "@/components/discussion-comment"
-import { linkButtonClass } from "@/components/ui"
+import { ghostButtonClass, inputClass, linkButtonClass, smallButtonClass } from "@/components/ui"
 import { api } from "@/lib/api"
 import type { DiscussionState } from "@/lib/discussion"
 import { cn } from "@/lib/utils"
@@ -33,10 +33,14 @@ export function ThreadView({ thread, write, className }: ThreadViewProps) {
     <div className={cn("flex flex-col gap-3", className)}>
       {(thread.is_resolved || thread.is_outdated) && (
         <div className="flex items-center gap-2 text-xs text-neutral-500">
-          {thread.is_resolved && <span className="font-medium">Resolved</span>}
-          {thread.is_outdated && <span className="rounded border border-neutral-300 px-1 dark:border-neutral-700">Outdated</span>}
+          {thread.is_resolved && (
+            <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-medium dark:bg-neutral-800">Resolved</span>
+          )}
+          {thread.is_outdated && (
+            <span className="rounded border border-neutral-300 px-1.5 py-0.5 dark:border-neutral-700">Outdated</span>
+          )}
           {!open && <span>{count}</span>}
-          <button type="button" onClick={() => setOpen((o) => !o)} className={linkButtonClass}>
+          <button type="button" onClick={() => setOpen((o) => !o)} className={cn(ghostButtonClass, "ml-auto")}>
             {open ? "Hide" : "Show"}
           </button>
         </div>
@@ -68,20 +72,27 @@ export function ThreadView({ thread, write, className }: ThreadViewProps) {
               ]}
             />
           ) : (
-            <div className="flex gap-3 text-xs">
+            <div className="flex items-center gap-2">
               {thread.viewer_can_reply && (
-                <button type="button" onClick={() => setReplying(true)} className={linkButtonClass}>
-                  Reply
+                <button
+                  type="button"
+                  onClick={() => setReplying(true)}
+                  className={cn(
+                    inputClass,
+                    "min-w-0 flex-1 cursor-text text-left text-neutral-400 hover:border-neutral-400 dark:hover:border-neutral-600",
+                  )}
+                >
+                  Reply…
                 </button>
               )}
               {thread.viewer_can_resolve && !thread.is_resolved && (
-                <button type="button" disabled={busy} onClick={() => setResolved(true)} className={linkButtonClass}>
-                  Resolve
+                <button type="button" disabled={busy} onClick={() => setResolved(true)} className={smallButtonClass}>
+                  Resolve conversation
                 </button>
               )}
               {thread.viewer_can_unresolve && thread.is_resolved && (
-                <button type="button" disabled={busy} onClick={() => setResolved(false)} className={linkButtonClass}>
-                  Unresolve
+                <button type="button" disabled={busy} onClick={() => setResolved(false)} className={smallButtonClass}>
+                  Unresolve conversation
                 </button>
               )}
             </div>

@@ -6,6 +6,14 @@ export const buttonClass =
 export const secondaryButtonClass =
   "rounded-md border border-neutral-300 px-3 py-1.5 hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
 
+/** A compact secondary button, for actions on a comment or thread. */
+export const smallButtonClass =
+  "rounded-md border border-neutral-300 px-2 py-1 text-xs font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+
+/** A borderless button for low-key actions, such as edit and delete. */
+export const ghostButtonClass =
+  "rounded-md px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+
 export const inputClass = "rounded-md border border-neutral-300 bg-transparent px-2 py-1.5 dark:border-neutral-700"
 
 export const linkButtonClass = "text-blue-600 hover:underline disabled:opacity-50 dark:text-blue-400"
