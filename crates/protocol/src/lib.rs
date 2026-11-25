@@ -4,5 +4,4 @@
 pub mod handoff;
 pub mod hunk;
 pub mod review;
-pub mod self_review;
 pub mod siwc;

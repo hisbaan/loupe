@@ -3,9 +3,6 @@
 //! their own comments live in `notes_json`, which the web client owns. Export
 //! to markdown happens in the browser.
 
-mod output;
-mod prompt;
-
 use std::convert::Infallible;
 
 use axum::{
@@ -16,12 +13,14 @@ use axum::{
     routing::{get, put},
 };
 use futures_util::Stream;
-use loupe_protocol::self_review::{SELF_REVIEW_SCHEMA_VERSION, SelfReview};
+use loupe_protocol::review::{Review, SCHEMA_VERSION};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
     job::{self, Effort},
+    output,
+    prompt::{self, Carried},
     tools,
 };
 use crate::{
@@ -34,8 +33,6 @@ use crate::{
     state::AppState,
 };
 
-/// Above this, tools are disabled: every tool round resends the whole input.
-const MAX_TOOL_INPUT_CHARS: usize = 150_000;
 const MAX_NOTES_BYTES: usize = 256 * 1024;
 const MAX_LISTED: i64 = 20;
 
@@ -60,7 +57,7 @@ struct SelfReviewRecord {
     files_read: Vec<String>,
     /// Covers the pull request's current base and head commits.
     current: bool,
-    review: SelfReview,
+    review: Review,
     notes: Value,
 }
 
@@ -125,7 +122,7 @@ async fn list(
     .bind(pr.pull.repo_id()?)
     .bind(number as i64)
     .bind(prompt::PROMPT_VERSION)
-    .bind(SELF_REVIEW_SCHEMA_VERSION as i64)
+    .bind(SCHEMA_VERSION as i64)
     .bind(MAX_LISTED)
     .fetch_all(&state.db)
     .await?;
@@ -187,20 +184,20 @@ async fn run(
         .map_err(err)?;
     let repo_id = pr.pull.repo_id().map_err(err)?;
 
-    let prompt = prompt::build(&pr).map_err(|chars| {
+    let prompt = prompt::build(&pr, None, None).map_err(|chars| {
         format!(
             "This pull request is too large for a self-review ({chars} characters of diff, limit {}).",
             prompt::MAX_INPUT_CHARS
         )
     })?;
-    if pr.files.iter().all(|f| f.analysis.hunks.iter().all(|h| h.collapsible)) {
+    if prompt.hunks.is_empty() {
         return Err("Nothing to review: every change was collapsed by the pre-pass.".into());
     }
 
-    let use_tools = prompt.input.len() <= MAX_TOOL_INPUT_CHARS;
-    let mut instructions = prompt::INSTRUCTIONS.to_owned();
+    let use_tools = prompt.input.len() <= prompt::MAX_TOOL_INPUT_CHARS;
+    let mut instructions = format!("{}{}", prompt::SELF_REVIEW_INSTRUCTIONS, prompt::OUTPUT_INSTRUCTIONS);
     let toolbox = if use_tools {
-        instructions.push_str(&super::prompt::tool_instructions(effort.budget().calls));
+        instructions.push_str(&prompt::tool_instructions(effort.budget().calls));
         Some(tools::Toolbox::new(
             Source::new(state.clone(), token, &pr).map_err(err)?,
             effort.budget(),
@@ -221,9 +218,9 @@ async fn run(
         schema: output::schema(),
         toolbox,
     }
-    .run()
+    .run(|raw| output::parse(raw, &pr, &prompt, &Carried::default()).map_err(output::Invalid::rejection))
     .await?;
-    let review = output::parse(&output.text, &pr).map_err(|e| format!("The model's self-review was invalid: {e}"))?;
+    let review = output.value;
 
     reporter.status("Saving").await;
     let review_json = serde_json::to_string(&review).map_err(|e| err(AppError::Internal(e.into())))?;
@@ -240,7 +237,7 @@ async fn run(
     .bind(&pr.pull.head.sha)
     .bind(model)
     .bind(prompt::PROMPT_VERSION)
-    .bind(SELF_REVIEW_SCHEMA_VERSION as i64)
+    .bind(SCHEMA_VERSION as i64)
     .bind(&review_json)
     .bind(effort.as_str())
     .bind(serde_json::to_string(&output.files_read).unwrap_or_else(|_| "[]".into()))

@@ -148,24 +148,39 @@ pub struct Generation<'a> {
 }
 
 /// What a generation produced.
-pub struct Output {
-    /// The model's final JSON text.
-    pub text: String,
+pub struct Output<T> {
+    /// The model's answer, as accepted by the check.
+    pub value: T,
     /// Repository files the model read, for provenance.
     pub files_read: Vec<String>,
 }
 
+/// Why an answer wasn't accepted.
+pub enum Rejection {
+    /// Worth one more try: `message` goes to the model, `error` to the user if
+    /// the second answer is rejected too.
+    Repair {
+        message: String,
+        error: String,
+    },
+    Fail(String),
+}
+
 impl Generation<'_> {
-    pub async fn run(mut self) -> Result<Output, String> {
+    /// Runs until the model answers and `check` accepts the answer, asking the
+    /// model at most once to repair a rejected one.
+    pub async fn run<T>(mut self, check: impl Fn(&str) -> Result<T, Rejection>) -> Result<Output<T>, String> {
         let definitions = if self.toolbox.is_some() {
             tools::definitions()
         } else {
             Vec::new()
         };
         let mut input = vec![inference::user_message(self.input)];
+        let mut repairing = false;
 
         let max_turns = self.effort.max_turns();
-        for turn_number in 1..=max_turns {
+        // One turn more than the budget, for a repair.
+        for turn_number in 1..=max_turns + 1 {
             self.reporter.status("Generating").await;
             let exhausted = self.toolbox.as_ref().is_none_or(Toolbox::exhausted);
             let turn = inference::respond(
@@ -180,7 +195,7 @@ impl Generation<'_> {
                     schema_name: self.schema_name,
                     schema: self.schema.clone(),
                     tools: &definitions,
-                    forbid_tools: exhausted || turn_number == max_turns,
+                    forbid_tools: exhausted || repairing || turn_number >= max_turns,
                 },
                 |chars| self.reporter.generating(chars),
             )
@@ -189,10 +204,22 @@ impl Generation<'_> {
 
             let calls: Vec<_> = turn.function_calls().collect();
             if calls.is_empty() {
-                return Ok(Output {
-                    text: turn.text,
-                    files_read: self.toolbox.map(Toolbox::files_read).unwrap_or_default(),
-                });
+                match check(&turn.text) {
+                    Ok(value) => {
+                        return Ok(Output {
+                            value,
+                            files_read: self.toolbox.map(Toolbox::files_read).unwrap_or_default(),
+                        });
+                    }
+                    Err(Rejection::Repair { message, .. }) if !repairing => {
+                        repairing = true;
+                        self.reporter.status("Asking the model to fix its answer").await;
+                        input.extend(turn.items.iter().cloned());
+                        input.push(inference::user_message(&message));
+                        continue;
+                    }
+                    Err(Rejection::Repair { error, .. } | Rejection::Fail(error)) => return Err(error),
+                }
             }
             let Some(toolbox) = self.toolbox.as_mut() else {
                 return Err("The model asked for tools that weren't offered.".into());

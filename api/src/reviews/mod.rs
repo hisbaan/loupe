@@ -6,7 +6,7 @@ mod prompt;
 mod self_review;
 mod tools;
 
-use std::{collections::BTreeMap, convert::Infallible};
+use std::{collections::HashSet, convert::Infallible};
 
 use axum::{
     Json, Router,
@@ -15,7 +15,7 @@ use axum::{
     routing::get,
 };
 use futures_util::Stream;
-use loupe_protocol::review::{GuidedReview, SCHEMA_VERSION};
+use loupe_protocol::review::{Review, SCHEMA_VERSION};
 use serde::{Deserialize, Serialize};
 
 use self::job::Effort;
@@ -59,7 +59,7 @@ pub struct ReviewRecord {
     /// The pull request's author asked for this review of their own change.
     requested_by_author: bool,
     updated_from: Option<UpdatedFrom>,
-    review: GuidedReview,
+    review: Review,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -282,26 +282,7 @@ impl Job {
             Some(id) => Some(self.load_base(id, repo_id, &viewer).await?),
             None => None,
         };
-        // Hunk ids hash the path and hunk text, so an id that still exists
-        // means the hunk is unchanged since the earlier review.
-        let carried: BTreeMap<_, _> = match &base {
-            Some(base) => {
-                let current: std::collections::HashSet<&str> = pr
-                    .files
-                    .iter()
-                    .flat_map(|f| &f.analysis.hunks)
-                    .filter(|h| !h.collapsible)
-                    .map(|h| h.id.as_str())
-                    .collect();
-                base.review
-                    .hunks
-                    .iter()
-                    .filter(|(id, _)| current.contains(id.as_str()))
-                    .map(|(id, a)| (id.clone(), a.clone()))
-                    .collect()
-            }
-            None => BTreeMap::new(),
-        };
+        let carried = base.as_ref().map(|b| carry(&b.review, &pr)).unwrap_or_default();
         let previous = base.as_ref().map(|base| prompt::Previous {
             head_sha: &base.head_sha,
             summary: &base.review.summary,
@@ -322,12 +303,12 @@ impl Job {
                 prompt::MAX_INPUT_CHARS
             )
         })?;
-        if prompt.required_hunks.is_empty() && carried.is_empty() {
+        if prompt.hunks.is_empty() {
             return Err("Nothing to review: every change was collapsed by the pre-pass.".into());
         }
 
         let use_tools = prompt.input.len() <= prompt::MAX_TOOL_INPUT_CHARS;
-        let mut instructions = prompt::INSTRUCTIONS.to_owned();
+        let mut instructions = format!("{}{}", prompt::GUIDED_INSTRUCTIONS, prompt::OUTPUT_INSTRUCTIONS);
         if use_tools {
             instructions.push_str(&prompt::tool_instructions(self.effort.budget().calls));
         }
@@ -354,11 +335,9 @@ impl Job {
             schema: output::schema(),
             toolbox,
         }
-        .run()
+        .run(|raw| output::parse(raw, &pr, &prompt, &carried).map_err(output::Invalid::rejection))
         .await?;
-
-        let review = output::parse(&output.text, &prompt.required_hunks, &carried)
-            .map_err(|err| format!("The model's review was invalid: {err}"))?;
+        let review = output.value;
 
         self.reporter.status("Saving").await;
         let review_json = serde_json::to_string(&review).map_err(|e| app_err(AppError::Internal(e.into())))?;
@@ -425,6 +404,36 @@ impl Job {
             return Err("That review already covers the latest commits.".into());
         }
         Ok(record)
+    }
+}
+
+/// What an earlier review said that still applies. Hunk ids hash the path and
+/// hunk text, so an id that's still in the diff means the hunk is unchanged
+/// (and so are its line numbers).
+fn carry(earlier: &Review, pr: &PullResponse) -> prompt::Carried {
+    let current: HashSet<&str> = pr
+        .files
+        .iter()
+        .flat_map(|f| &f.analysis.hunks)
+        .filter(|h| !h.collapsible)
+        .map(|h| h.id.as_str())
+        .collect();
+    let still = |id: &str| current.contains(id);
+    prompt::Carried {
+        findings: earlier.findings.iter().filter(|f| still(&f.hunk_id)).cloned().collect(),
+        notes: earlier
+            .hunk_notes
+            .iter()
+            .filter(|(id, _)| still(id))
+            .map(|(id, n)| (id.clone(), n.clone()))
+            .collect(),
+        hunks: earlier
+            .sections
+            .iter()
+            .flat_map(|s| &s.hunk_ids)
+            .filter(|id| still(id))
+            .cloned()
+            .collect(),
     }
 }
 
