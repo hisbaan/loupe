@@ -15,16 +15,28 @@ function headerOf(hunk: string): string {
 }
 
 /**
- * GitHub's per-file `patch` is just the hunks. Add the unified-diff file
- * headers so @pierre/diffs can tell which file (and language) it is.
- * `hunks` defaults to all of them.
+ * GitHub's per-file `patch` is just the hunks. Add git's file headers so
+ * @pierre/diffs can tell which file (and language) it is and whether it was
+ * added, removed or renamed. Without the `diff --git` line it keeps the `a/`
+ * and `b/` prefixes and shows every file as a rename. `hunks` defaults to all
+ * of them.
  */
 export function toUnifiedPatch(file: PullFile, hunks?: string[]): string | null {
   if (file.patch == null) return null
-  const oldName = file.status === "added" ? "/dev/null" : `a/${file.previous_filename ?? file.filename}`
-  const newName = file.status === "removed" ? "/dev/null" : `b/${file.filename}`
+  const oldPath = file.previous_filename ?? file.filename
+  const header = [`diff --git a/${oldPath} b/${file.filename}`]
+  if (file.status === "added") header.push("new file mode 100644")
+  if (file.status === "removed") header.push("deleted file mode 100644")
+  if (file.status === "renamed" && oldPath !== file.filename) {
+    // The parser only marks a rename when it sees a similarity line; GitHub doesn't give the percentage.
+    header.push("similarity index", `rename from ${oldPath}`, `rename to ${file.filename}`)
+  }
+  header.push(
+    `--- ${file.status === "added" ? "/dev/null" : `a/${oldPath}`}`,
+    `+++ ${file.status === "removed" ? "/dev/null" : `b/${file.filename}`}`,
+  )
   const body = (hunks ?? [file.patch]).map((h) => (h.endsWith("\n") ? h : `${h}\n`)).join("")
-  return `--- ${oldName}\n+++ ${newName}\n${body}`
+  return `${header.join("\n")}\n${body}`
 }
 
 export type CollapsePlan = {
