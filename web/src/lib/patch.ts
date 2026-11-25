@@ -1,4 +1,4 @@
-import type { AnalyzedFile, HunkKind, PullFile } from "@/lib/types"
+import type { AnalyzedFile, HunkAnalysis, HunkKind, PullFile } from "@/lib/types"
 
 /** Splits GitHub's per-file patch into hunks, the same way api/src/prepass does. */
 export function splitHunks(patch: string): string[] {
@@ -39,35 +39,68 @@ export function toUnifiedPatch(file: PullFile, hunks?: string[]): string | null 
   return `${header.join("\n")}\n${body}`
 }
 
-export type CollapsePlan = {
-  /** Patch with collapsible hunks removed, or null when nothing is hidden. */
-  reducedPatch: string | null
-  hiddenKinds: HunkKind[]
-  hiddenCount: number
-}
-
-/**
- * Works out which hunks to hide. If the client's hunk split disagrees with
- * the server's analysis, hides nothing rather than guess.
- */
-export function planCollapse(file: AnalyzedFile): CollapsePlan {
-  const none: CollapsePlan = { reducedPatch: null, hiddenKinds: [], hiddenCount: 0 }
-  if (file.patch == null) return none
-
+/** The patch's hunks, or null if the client splits them differently from the server's analysis. */
+export function alignedHunks(file: AnalyzedFile): string[] | null {
+  if (file.patch == null) return null
   const hunks = splitHunks(file.patch)
   const analysis = file.analysis.hunks
   const aligned = hunks.length === analysis.length && hunks.every((h, i) => headerOf(h) === analysis[i].header)
-  if (!aligned) return none
+  return aligned ? hunks : null
+}
 
-  const kept = hunks.filter((_, i) => !analysis[i].collapsible)
-  const hidden = analysis.filter((h) => h.collapsible)
-  if (hidden.length === 0 || kept.length === 0) return none
+/** A file, or some of its hunks, shown as one card. */
+export type FileSlice = {
+  file: AnalyzedFile
+  /** The hunks shown, in file order; null for the whole file. */
+  hunkIds: string[] | null
+}
 
-  return {
-    reducedPatch: toUnifiedPatch(file, kept),
-    hiddenKinds: [...new Set(hidden.map((h) => h.kind))],
-    hiddenCount: hidden.length,
+/** The patch for a slice, or null if the file has no textual diff. */
+export function slicePatch({ file, hunkIds }: FileSlice): string | null {
+  if (hunkIds == null) return toUnifiedPatch(file)
+  const texts = alignedHunks(file)
+  if (texts == null) return toUnifiedPatch(file)
+  const wanted = new Set(hunkIds)
+  return toUnifiedPatch(file, texts.filter((_, i) => wanted.has(file.analysis.hunks[i].id)))
+}
+
+/** The hunks a slice shows. */
+export function sliceHunks({ file, hunkIds }: FileSlice): HunkAnalysis[] {
+  if (hunkIds == null) return file.analysis.hunks
+  const wanted = new Set(hunkIds)
+  return file.analysis.hunks.filter((h) => wanted.has(h.id))
+}
+
+export type CollapsedGroup = { kind: HunkKind; slices: FileSlice[] }
+
+/**
+ * Splits files into what to review and what the pre-pass collapsed, by kind.
+ * If the client can't match a file's hunks to the analysis, the whole file
+ * stays in review rather than guess which part to hide.
+ */
+export function splitCollapsed(files: AnalyzedFile[]): { review: FileSlice[]; collapsed: CollapsedGroup[] } {
+  const review: FileSlice[] = []
+  const byKind = new Map<HunkKind, FileSlice[]>()
+  const collapse = (kind: HunkKind, slice: FileSlice) => byKind.set(kind, [...(byKind.get(kind) ?? []), slice])
+
+  for (const file of files) {
+    const { analysis } = file
+    if (analysis.collapsible) {
+      collapse(analysis.kind ?? analysis.hunks[0]?.kind ?? "rename", { file, hunkIds: null })
+      continue
+    }
+    const hidden = analysis.hunks.filter((h) => h.collapsible)
+    if (hidden.length === 0 || alignedHunks(file) == null) {
+      review.push({ file, hunkIds: null })
+      continue
+    }
+    review.push({ file, hunkIds: analysis.hunks.filter((h) => !h.collapsible).map((h) => h.id) })
+    for (const kind of new Set(hidden.map((h) => h.kind))) {
+      collapse(kind, { file, hunkIds: hidden.filter((h) => h.kind === kind).map((h) => h.id) })
+    }
   }
+  const collapsed = [...byKind].map(([kind, slices]) => ({ kind, slices }))
+  return { review, collapsed }
 }
 
 export const KIND_LABELS: Record<HunkKind, string> = {

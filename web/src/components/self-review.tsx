@@ -1,6 +1,6 @@
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs"
 import { useEffect, useRef, useState } from "react"
-import { FileDiffCard } from "@/components/file-diff-card"
+import { DiffColumn } from "@/components/diff-column"
 import { GenerateControls } from "@/components/generate-controls"
 import { ReviewColumns } from "@/components/review-columns"
 import { CommentNote, FindingNote } from "@/components/self-review-notes"
@@ -8,6 +8,7 @@ import { SeverityBadge } from "@/components/severity-badge"
 import { errorMessage, secondaryButtonClass } from "@/components/ui"
 import { api } from "@/lib/api"
 import { lineRange } from "@/lib/discussion"
+import { splitCollapsed } from "@/lib/patch"
 import { shortSha } from "@/lib/reviews"
 import {
   SEVERITY_ORDER,
@@ -127,6 +128,8 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
     )
   }
 
+  const layout = splitCollapsed(files)
+
   return (
     <ReviewColumns
       aside={
@@ -196,18 +199,14 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
           agent. Only you can see it.
         </section>
       )}
-      <div className="flex flex-col gap-4">
-        {files.map((file) => (
-          <FileDiffCard
-            key={file.filename}
-            file={file}
-            annotations={annotationsFor(file.filename)}
-            renderAnnotation={renderNote}
-            onAddComment={record?.current ? (range) => addComment(file.filename, range) : undefined}
-            githubUrl={githubFileUrl(pull, file)}
-          />
-        ))}
-      </div>
+      <DiffColumn
+        groups={[{ key: "files", slices: layout.review }]}
+        collapsed={layout.collapsed}
+        annotationsFor={(file) => annotationsFor(file.filename)}
+        renderAnnotation={renderNote}
+        onAddComment={record?.current ? (file, range) => addComment(file.filename, range) : undefined}
+        githubUrl={(file) => githubFileUrl(pull, file)}
+      />
     </ReviewColumns>
   )
 }

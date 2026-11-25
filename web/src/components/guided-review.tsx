@@ -1,6 +1,6 @@
 import type { DiffLineAnnotation } from "@pierre/diffs"
 import { useEffect, useState } from "react"
-import { FileDiffCard } from "@/components/file-diff-card"
+import { DiffColumn } from "@/components/diff-column"
 import { GenerateControls, type GenerateAction } from "@/components/generate-controls"
 import { HunkNote } from "@/components/hunk-note"
 import { ReviewColumns } from "@/components/review-columns"
@@ -12,9 +12,10 @@ import { noteClass } from "@/components/ui"
 import { Walkthrough } from "@/components/walkthrough"
 import { api } from "@/lib/api"
 import { lineRange, threadPlacements, type DiscussionState } from "@/lib/discussion"
+import { splitCollapsed } from "@/lib/patch"
 import { assessmentAnnotations, autoSelected, shortSha, updatableReview } from "@/lib/reviews"
 import { fileAnchor, githubFileUrl } from "@/lib/utils"
-import type { HunkAssessment, PullResponse, ReviewRecord, ReviewThread } from "@/lib/types"
+import type { AnalyzedFile, HunkAssessment, PullResponse, ReviewRecord, ReviewThread } from "@/lib/types"
 
 type GuidedReviewProps = {
   owner: string
@@ -79,7 +80,7 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
   const loaded = discussion.discussion
   const canComment = loaded != null && loaded.head_sha === pull.head.sha
 
-  function annotationsFor(file: PullResponse["files"][number]): DiffLineAnnotation<Annotated>[] {
+  function annotationsFor(file: AnalyzedFile): DiffLineAnnotation<Annotated>[] {
     const wrap = (note: Note): Annotated => ({ note })
     return [
       ...assessmentAnnotations(file, record?.review.hunks).map((a) => ({
@@ -133,6 +134,7 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
     }
   }
 
+  const layout = splitCollapsed(files)
   const hasMine = reviews.some((r) => r.current && r.trust === "mine")
   const updateFrom = updatableReview(reviews)
   const actions: GenerateAction[] = [{ label: hasMine ? "Regenerate review" : "Generate guided review", run: generate() }]
@@ -166,18 +168,14 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
         />
       )}
       {record && <ReviewSummary record={record} files={files} />}
-      <div className="flex flex-col gap-4">
-        {files.map((file) => (
-          <FileDiffCard
-            key={file.filename}
-            file={file}
-            annotations={annotationsFor(file)}
-            renderAnnotation={renderNote}
-            onAddComment={canComment ? (range) => setDraft({ path: file.filename, ...lineRange(range) }) : undefined}
-            githubUrl={githubFileUrl(pull, file)}
-          />
-        ))}
-      </div>
+      <DiffColumn
+        groups={[{ key: "files", slices: layout.review }]}
+        collapsed={layout.collapsed}
+        annotationsFor={annotationsFor}
+        renderAnnotation={renderNote}
+        onAddComment={canComment ? (file, range) => setDraft({ path: file.filename, ...lineRange(range) }) : undefined}
+        githubUrl={(file) => githubFileUrl(pull, file)}
+      />
     </ReviewColumns>
   )
 }
