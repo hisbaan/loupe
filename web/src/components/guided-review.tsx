@@ -12,7 +12,7 @@ import { noteClass } from "@/components/ui"
 import { Walkthrough } from "@/components/walkthrough"
 import { api } from "@/lib/api"
 import { lineRange, threadPlacements, type DiscussionState } from "@/lib/discussion"
-import { splitCollapsed } from "@/lib/patch"
+import { defaultOrder, splitCollapsed } from "@/lib/patch"
 import { assessmentAnnotations, autoSelected, shortSha, updatableReview } from "@/lib/reviews"
 import { fileAnchor, githubFileUrl } from "@/lib/utils"
 import type { AnalyzedFile, HunkAssessment, PullResponse, ReviewRecord, ReviewThread } from "@/lib/types"
@@ -169,7 +169,7 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
       )}
       {record && <ReviewSummary record={record} files={files} />}
       <DiffColumn
-        groups={[{ key: "files", slices: layout.review }]}
+        groups={[{ key: "files", slices: defaultOrder(layout.review) }]}
         collapsed={layout.collapsed}
         annotationsFor={annotationsFor}
         renderAnnotation={renderNote}

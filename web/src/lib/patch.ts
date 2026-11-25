@@ -103,6 +103,16 @@ export function splitCollapsed(files: AnalyzedFile[]): { review: FileSlice[]; co
   return { review, collapsed }
 }
 
+/** Code first, then tests, config and docs; bigger changes first within each. */
+export function defaultOrder(slices: FileSlice[]): FileSlice[] {
+  const rank = (s: FileSlice) => KIND_RANK[s.file.analysis.kind ?? "code"] ?? OTHER_RANK
+  const size = (s: FileSlice) => sliceHunks(s).reduce((n, h) => n + h.old_lines + h.new_lines, 0)
+  return [...slices].sort((a, b) => rank(a) - rank(b) || size(b) - size(a))
+}
+
+const KIND_RANK: Partial<Record<HunkKind, number>> = { code: 0, test: 1, config: 2, docs: 3 }
+const OTHER_RANK = 4
+
 export const KIND_LABELS: Record<HunkKind, string> = {
   code: "code",
   import_only: "imports",

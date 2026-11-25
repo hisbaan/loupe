@@ -8,7 +8,7 @@ import { SeverityBadge } from "@/components/severity-badge"
 import { errorMessage, secondaryButtonClass } from "@/components/ui"
 import { api } from "@/lib/api"
 import { lineRange } from "@/lib/discussion"
-import { splitCollapsed } from "@/lib/patch"
+import { defaultOrder, splitCollapsed } from "@/lib/patch"
 import { shortSha } from "@/lib/reviews"
 import {
   SEVERITY_ORDER,
@@ -200,7 +200,7 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
         </section>
       )}
       <DiffColumn
-        groups={[{ key: "files", slices: layout.review }]}
+        groups={[{ key: "files", slices: defaultOrder(layout.review) }]}
         collapsed={layout.collapsed}
         annotationsFor={(file) => annotationsFor(file.filename)}
         renderAnnotation={renderNote}
