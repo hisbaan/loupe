@@ -8,6 +8,7 @@ mod inference;
 mod prepass;
 mod pulls;
 mod reviews;
+mod settings;
 mod setup;
 mod source;
 mod state;
@@ -59,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(inference::routes())
         .merge(vault::routes())
         .merge(trust::routes())
+        .merge(settings::routes())
         .merge(setup::routes());
 
     let index = Path::new(&config.web_dir).join("index.html");
