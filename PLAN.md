@@ -53,7 +53,7 @@ Cache keys:
 
 ## Features
 - **Guided review**: walkthrough sidebar drives scroll; low-importance and deterministic hunks are collapsed; rationale as `@pierre/diffs` line annotations.
-- **Mermaid diagrams**: the model adds a flow diagram to a step when useful. Lazy-loaded `mermaid`, strict security level, show source on parse failure.
+- **Mermaid diagrams**: the model adds a flow diagram to a step when useful. Drawn with lazy-loaded `pele` (flowcharts and sequence diagrams only, links and images off), show source on parse failure.
 - **Review on GitHub from Loupe**: GitHub's review threads inline in the diff, replies, resolve, line comments into your pending review, and submitting comment / approve / request changes, so you never need github.com to review.
 - **Stacks**: stacked pull requests shown as a stack (GitHub's stacks, or branch chains), each layer reviewed on its own with the rest of the stack as context.
 - **Self-review**: draft PRs or any `base...head`. A problem-finding prompt; human comments plus AI suggestions to accept, edit or dismiss; export markdown pinned to head SHA with `path:line` ranges and snippets for a coding agent.
@@ -82,7 +82,7 @@ Cache keys:
 6. [x] Sharing: per-user trusted reviewers with auto-load (`api/src/trust/`), "@x generated a review… use it?" offer, provenance badges (yours, trusted, requested by PR author, earlier commit, updated from), one review per requester per cache key, incremental update from an earlier review (unchanged hunk ids keep their assessments; only new hunks go to the model).
    - [ ] Org-level default trusted reviewers.
    - [ ] Re-review only changed files' context when updating (today the whole PR's file list and description are resent).
-7. [x] Mermaid diagrams: lazy-loaded `mermaid` (strict security level, SVG text labels, `secure` keys so `%%{init}%%` can't loosen them), rendered as an `<img>` data URL so the SVG can never script the page; source shown on parse failure. Diagrams sit under the summary; walkthrough steps link to them.
+7. [x] Mermaid diagrams: lazy-loaded `pele` (a small mermaid renderer: flowcharts and sequence diagrams only, labels escaped, links and images off), rendered as an `<img>` data URL so the SVG can never script the page; source shown on parse failure. Diagrams sit under the summary; walkthrough steps link to them.
 8. [x] Self-review (`api/src/reviews/self_review/`, `web/src/components/self-review.tsx`): a problem-finding prompt over line-numbered hunks; findings validated against hunk line ranges; private to the requester; accept / edit / dismiss plus your own comments via the diff gutter (stored as client-owned `notes_json`); markdown export pinned to the head SHA with path:line ranges and snippets (`web/src/lib/self-review.ts`). Defaults to the self-review tab on draft pull requests. Shared generation plumbing moved to `api/src/reviews/job.rs`.
    - [ ] Self-review any `base...head` (compare API), not just pull requests.
    - [ ] Comment without running the model first.

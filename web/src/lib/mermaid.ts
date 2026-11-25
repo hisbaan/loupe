@@ -1,51 +1,44 @@
-// Renders model-written mermaid diagrams. The source is untrusted (it comes
-// from a model that read the pull request), so:
-// - mermaid runs with securityLevel "strict" and plain SVG text labels;
-// - `secure` stops `%%{init}%%` directives in the source loosening that;
+// Renders model-written mermaid diagrams with pele. The source is untrusted
+// (it comes from a model that read the pull request), so:
+// - only flowcharts and sequence diagrams are drawn (the only modules loaded);
+// - pele escapes label text and drops links and images, so `click` and
+//   `%%{init}%%` can't add anything active;
 // - the SVG is shown through an <img>, never inserted into the page. An SVG
-//   loaded as an image can't run scripts or fetch anything, so even a mermaid
-//   sanitiser bug can't reach the page.
-// mermaid is large, so it's only loaded when a review has a diagram.
+//   loaded as an image can't run scripts or fetch anything, so even a pele
+//   escaping bug can't reach the page.
+// pele is only loaded when a review has a diagram.
 
-import type { Mermaid } from "mermaid"
+type Pele = typeof import("pele/core")
 
 const MAX_SOURCE = 8_000
+const MAX_EDGES = 200
+const MAX_OUTPUT = 2_000_000
 
-let loaded: Promise<Mermaid> | null = null
-let theme: "default" | "dark" | null = null
-let counter = 0
-// mermaid keeps global state while rendering, so render one at a time.
-let queue: Promise<unknown> = Promise.resolve()
+// The SVG reads its colours from --pele-* variables with light fallbacks.
+// An <img> can't see the page's CSS, so dark values go on the root element.
+const DARK = [
+  "--pele-bg:#171717",
+  "--pele-fg:#e5e5e5",
+  "--pele-muted:#a3a3a3",
+  "--pele-line:#d4d4d4",
+  "--pele-surface:#262626",
+  "--pele-surface-alt:#404040",
+  "--pele-border:#737373",
+  "--pele-accent:#60a5fa",
+].join(";")
 
-function load(): Promise<Mermaid> {
-  loaded ??= import("mermaid").then((m) => m.default)
-  return loaded
-}
+let loaded: Promise<Pele> | null = null
 
-function configure(mermaid: Mermaid) {
-  const wanted = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default"
-  if (theme === wanted) return
-  theme = wanted
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: "strict",
-    htmlLabels: false,
-    suppressErrorRendering: true,
-    maxTextSize: MAX_SOURCE,
-    maxEdges: 200,
-    theme: wanted,
-    secure: [
-      "secure",
-      "securityLevel",
-      "startOnLoad",
-      "maxTextSize",
-      "maxEdges",
-      "suppressErrorRendering",
-      "htmlLabels",
-      "themeCSS",
-      "fontFamily",
-    ],
+function load(): Promise<Pele> {
+  loaded ??= Promise.all([
+    import("pele/core"),
+    import("pele/diagrams/flowchart"),
+    import("pele/diagrams/sequence"),
+  ]).then(([pele, flowchart, sequence]) => {
+    pele.register(flowchart.default, sequence.default)
+    return pele
   })
+  return loaded
 }
 
 export type RenderedDiagram = {
@@ -55,17 +48,22 @@ export type RenderedDiagram = {
   height: number
 }
 
-async function renderNow(source: string): Promise<RenderedDiagram> {
+export async function renderMermaid(source: string): Promise<RenderedDiagram> {
   if (source.length > MAX_SOURCE) throw new Error("Diagram is too large")
-  const mermaid = await load()
-  configure(mermaid)
-  const { svg } = await mermaid.render(`loupe-mermaid-${++counter}`, source)
-  const [, , width, height] = (/viewBox="([^"]+)"/.exec(svg)?.[1] ?? "0 0 600 400").split(/\s+/).map(Number)
+  const pele = await load()
+  const type = pele.detectType(source)
+  if (type !== "flowchart" && type !== "sequence") throw new Error("Only flowcharts and sequence diagrams are drawn")
+  const rendered = pele.render(source, {
+    links: false,
+    images: false,
+    autoDirection: false,
+    limit: MAX_SOURCE,
+    maxEdges: MAX_EDGES,
+    outputLimit: MAX_OUTPUT,
+  })
+  const { width, height } = rendered
+  const svg = window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? rendered.svg.replace(/^<svg\b([^>]*?) style="/, `<svg$1 style="${DARK};`)
+    : rendered.svg
   return { url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, width, height }
-}
-
-export function renderMermaid(source: string): Promise<RenderedDiagram> {
-  const result = queue.then(() => renderNow(source))
-  queue = result.catch(() => undefined)
-  return result
 }
