@@ -24,7 +24,7 @@
 
 ## Code Style: Rust
 - `cargo fmt` (max width 120, `rustfmt.toml`). Edition 2024.
-- API layout: one module per feature (`auth/`, `discussion/`, `github/`, `pulls/`, `reviews/`, `setup/`, `trust/`, `vault/`) exposing `routes()`; mounted in `api/src/main.rs`. `discussion/` is the pull request's conversation, review threads and reviews on GitHub, read and written; `pulls/stack.rs` finds stacked pull requests. `prepass/` (diff classification) and `source/` (repo trees and blobs at pinned SHAs via the GitHub API, cached in SQLite) are libraries; `inference/` is the Responses API client plus routes for the model list and the ChatGPT refresh relay.
+- API layout: one module per feature (`auth/`, `discussion/`, `github/`, `pulls/`, `reviews/`, `settings/`, `setup/`, `trust/`, `vault/`) exposing `routes()`; mounted in `api/src/main.rs`. `discussion/` is the pull request's conversation, review threads and reviews on GitHub, read and written; `pulls/stack.rs` finds stacked pull requests. `prepass/` (diff classification) and `source/` (repo trees and blobs at pinned SHAs via the GitHub API, cached in SQLite) are libraries; `inference/` is the Responses API client plus routes for the model list and the ChatGPT refresh relay.
 - Handlers return `AppResult<T>`; map failures to `AppError` (`api/src/error.rs`). Never leak internal error text to clients.
 - Auth: take `CurrentUser` as an extractor to require a session.
 - SQL: runtime `sqlx::query`/`query_as` with `?` binds (no compile-time macros, so builds don't need a DB). Migrations in `api/migrations/`, applied on startup.
@@ -37,6 +37,7 @@
 - Imports via `@/` alias. API calls go through `web/src/lib/api.ts` (returns `{ ok, status, data | error }`).
 - In-app links use `Link` (`web/src/components/link.tsx`), not `<a>`, so navigation keeps loaded state.
 - Vault: `web/src/lib/vault/` (WebCrypto + WebAuthn PRF, store, remembered key); get a job's credential with `credentialFor()` in `web/src/lib/inference.ts`.
+- Preferences (model, diff view) go through `web/src/lib/settings.ts`, which syncs them to the account (`api/src/settings/`, opaque JSON the client validates). Never put credentials there.
 - `web/src/lib/types.ts` mirrors API response shapes; update both sides together.
 
 ## Security Invariants (do not regress)

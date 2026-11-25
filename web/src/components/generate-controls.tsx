@@ -1,8 +1,7 @@
 import { useState } from "react"
 import { Link } from "@/components/link"
-import { buttonClass, errorMessage, inputClass, linkButtonClass, secondaryButtonClass } from "@/components/ui"
+import { buttonClass, errorMessage, linkButtonClass, secondaryButtonClass } from "@/components/ui"
 import { VaultGate } from "@/components/vault-gate"
-import { api } from "@/lib/api"
 import { PROVIDER_LABELS, availableProviders, credentialFor, useInferencePreferences, type Provider } from "@/lib/inference"
 import type { Credential, JobProgress } from "@/lib/types"
 import { useVault, type VaultContents } from "@/lib/vault/store"
@@ -19,7 +18,7 @@ type GenerateControlsProps = {
   actions: GenerateAction[]
 }
 
-/** Provider and model pickers plus buttons for generation jobs. */
+/** Buttons for generation jobs, using the model chosen in settings. */
 export function GenerateControls(props: GenerateControlsProps) {
   const state = useVault()
   if (state.status !== "unlocked") return <VaultGate />
@@ -29,9 +28,7 @@ export function GenerateControls(props: GenerateControlsProps) {
 type RunState = { kind: "idle" } | { kind: "running"; message: string } | { kind: "error"; message: string }
 
 function Controls({ actions, contents }: GenerateControlsProps & { contents: VaultContents }) {
-  const providers = availableProviders(contents)
-  const { provider, model, setProvider, setModel } = useInferencePreferences(providers)
-  const [models, setModels] = useState<string[]>([])
+  const { provider, model } = useInferencePreferences(availableProviders(contents))
   const [run, setRun] = useState<RunState>({ kind: "idle" })
 
   if (!provider) {
@@ -44,16 +41,6 @@ function Controls({ actions, contents }: GenerateControlsProps & { contents: Vau
         .
       </p>
     )
-  }
-
-  async function loadModels(provider: Provider) {
-    try {
-      const result = await api.models(await credentialFor(provider))
-      if (result.ok) setModels(result.data.models)
-      else setRun({ kind: "error", message: result.error })
-    } catch (err) {
-      setRun({ kind: "error", message: errorMessage(err) })
-    }
   }
 
   async function start(action: GenerateAction, provider: Provider) {
@@ -84,36 +71,19 @@ function Controls({ actions, contents }: GenerateControlsProps & { contents: Vau
 
   return (
     <div className="flex flex-col gap-2 text-sm">
-      {providers.length > 1 && (
-        <select
-          value={provider}
-          onChange={(e) => {
-            setProvider(e.target.value as Provider)
-            setModels([])
-          }}
-          className={inputClass}
-        >
-          {providers.map((p) => (
-            <option key={p} value={p}>
-              {PROVIDER_LABELS[p]}
-            </option>
-          ))}
-        </select>
-      )}
-      <label className="flex flex-col gap-1">
-        <span className="flex items-center justify-between text-neutral-500">
-          Model{providers.length === 1 && ` (${PROVIDER_LABELS[provider]})`}
-          <button type="button" onClick={() => loadModels(provider)} className={linkButtonClass}>
-            Load models
-          </button>
-        </span>
-        <input list="loupe-models" value={model} onChange={(e) => setModel(e.target.value.trim())} className={inputClass} />
-        <datalist id="loupe-models">
-          {models.map((m) => (
-            <option key={m} value={m} />
-          ))}
-        </datalist>
-      </label>
+      <p className="text-neutral-500">
+        {model ? (
+          <>
+            <span className="font-mono text-neutral-900 dark:text-neutral-100">{model}</span> via {PROVIDER_LABELS[provider]}
+            {" · "}
+          </>
+        ) : (
+          "No model chosen. "
+        )}
+        <Link href="/settings" className={linkButtonClass}>
+          {model ? "Change" : "Choose one in settings"}
+        </Link>
+      </p>
       {actions.map((action) => (
         <button
           key={action.label}

@@ -83,6 +83,9 @@ export const api = {
   setupConvert: (body: { token: string; code: string; state: string }) =>
     request<{ env: string; app_url: string; install_url: string }>("/setup/convert", postJson(body)),
   me: () => request<Me>("/me"),
+  /** Owned by `@/lib/settings`, which validates it; `{}` until first saved. */
+  settings: () => request<Record<string, unknown>>("/settings"),
+  saveSettings: (settings: unknown) => request<void>("/settings", sendJson("PUT", settings)),
   pulls: (refresh = false) => request<PullListResponse>(refresh ? "/pulls?refresh=true" : "/pulls"),
   pull: (owner: string, repo: string, number: number) => request<PullResponse>(pullPath(owner, repo, number)),
   stack: (owner: string, repo: string, number: number) =>

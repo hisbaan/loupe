@@ -13,10 +13,9 @@ import {
   LINE_HOVER_HIGHLIGHTS,
   OVERFLOWS,
   THEME_TYPES,
-  resetDiffSettings,
-  updateDiffSettings,
-  useDiffSettings,
 } from "@/lib/diff-settings"
+import { PROVIDER_LABELS, availableProviders, credentialFor, useInferencePreferences, type Provider } from "@/lib/inference"
+import { resetDiffSettings, updateDiffSettings, updateInferenceSettings, useDiffSettings, useSettings } from "@/lib/settings"
 import { timeAgo } from "@/lib/utils"
 import { currentLogin, passphraseProblem, useVault, vault, type VaultContents } from "@/lib/vault/store"
 import type { TrustedReviewer, VaultKeyRecord } from "@/lib/types"
@@ -59,6 +58,10 @@ export function SettingsPage() {
     <Layout>
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
         <h1 className="text-2xl font-semibold">Settings</h1>
+        <p className="-mt-4 text-sm text-neutral-500">
+          Saved to your account, so they follow you to other computers. Credentials stay in your vault.
+        </p>
+        <ReviewSection contents={state.status === "unlocked" ? state.contents : null} />
         <DiffViewSection />
         {state.status !== "signed_out" && <GitHubSection />}
         {state.status !== "signed_out" && <TrustedSection />}
@@ -115,12 +118,77 @@ function CheckboxRow({ label, checked, onChange }: { label: string; checked: boo
 
 const themeChoices = (names: string[]) => names.map((name) => ({ value: name, label: name }))
 
+const ALL_PROVIDERS: Provider[] = ["chatgpt", "api_key"]
+
+/** Which model generates reviews. `contents` is null while the vault is locked. */
+function ReviewSection({ contents }: { contents: VaultContents | null }) {
+  const { inference } = useSettings()
+  const connected = contents ? availableProviders(contents) : []
+  const preferred = useInferencePreferences(connected).provider
+  const provider = preferred ?? inference.provider ?? "chatgpt"
+  const choices = connected.length > 0 ? connected : ALL_PROVIDERS
+  const model = inference.models[provider] ?? ""
+  const [models, setModels] = useState<string[]>([])
+  const { busy, error, run } = useAction()
+
+  async function loadModels() {
+    await run(async () => {
+      const result = await api.models(await credentialFor(provider))
+      if (!result.ok) throw new Error(result.error)
+      setModels(result.data.models)
+    })
+  }
+
+  return (
+    <Section title="Reviews">
+      <div className="flex flex-col gap-2 text-sm">
+        {choices.length > 1 && (
+          <SelectRow
+            label="Use"
+            value={provider}
+            choices={choices.map((p) => ({ value: p, label: PROVIDER_LABELS[p] }))}
+            onChange={(next) => {
+              updateInferenceSettings({ provider: next })
+              setModels([])
+            }}
+          />
+        )}
+        <label className="flex items-center justify-between gap-3">
+          <span>Model{choices.length === 1 && ` (${PROVIDER_LABELS[provider]})`}</span>
+          <span className="flex items-center gap-2">
+            {connected.includes(provider) && (
+              <button type="button" disabled={busy} onClick={loadModels} className={linkButtonClass}>
+                Load models
+              </button>
+            )}
+            <input
+              list="loupe-models"
+              value={model}
+              placeholder="e.g. gpt-5"
+              onChange={(e) =>
+                updateInferenceSettings({ models: { ...inference.models, [provider]: e.target.value.trim() } })
+              }
+              className={`${inputClass} w-56`}
+            />
+          </span>
+          <datalist id="loupe-models">
+            {models.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </label>
+        {contents == null && <p className="text-neutral-500">Unlock your vault below to load the list of models.</p>}
+        {error && <p className="text-red-600">{error}</p>}
+      </div>
+    </Section>
+  )
+}
+
 function DiffViewSection() {
   const s = useDiffSettings()
 
   return (
     <Section title="Diff view">
-      <p className="mb-3 text-sm text-neutral-500">Saved in this browser.</p>
       <div className="flex flex-col gap-2 text-sm">
         <SelectRow label="Layout" value={s.diffStyle} choices={DIFF_STYLES} onChange={(diffStyle) => updateDiffSettings({ diffStyle })} />
         <SelectRow

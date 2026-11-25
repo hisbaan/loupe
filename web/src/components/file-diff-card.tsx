@@ -1,8 +1,9 @@
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs"
 import { PatchDiff } from "@pierre/diffs/react"
 import { useState, type ReactNode } from "react"
-import { diffViewOptions, useDiffSettings } from "@/lib/diff-settings"
+import { diffViewOptions } from "@/lib/diff-settings"
 import { KIND_LABELS, sliceHunks, slicePatch, type FileSlice } from "@/lib/patch"
+import { useDiffSettings } from "@/lib/settings"
 
 type FileDiffCardProps<T> = {
   slice: FileSlice

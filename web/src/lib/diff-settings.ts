@@ -1,7 +1,6 @@
-// How diffs look. A per-browser preference, not secret, so it lives in localStorage.
+// How diffs look. Stored with the rest of the settings (`@/lib/settings`).
 
 import type { DiffIndicators, LineDiffTypes, ThemeTypes } from "@pierre/diffs"
-import { useSyncExternalStore } from "react"
 
 export type DiffSettings = {
   diffStyle: "split" | "unified"
@@ -163,8 +162,6 @@ export const DARK_THEMES = [
   "vitesse-dark",
 ]
 
-const KEY = "loupe.diff-settings"
-
 function oneOf<T>(value: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.includes(value as T) ? (value as T) : fallback
 }
@@ -173,13 +170,8 @@ const values = <T>(choices: Choice<T>[]) => choices.map((c) => c.value)
 const flag = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback)
 
 /** Reads stored settings, falling back to the default for anything missing or unrecognised. */
-function load(): DiffSettings {
-  let raw: Partial<Record<keyof DiffSettings, unknown>> = {}
-  try {
-    raw = JSON.parse(localStorage.getItem(KEY) ?? "{}") ?? {}
-  } catch {
-    // Corrupt value: use the defaults.
-  }
+export function parseDiffSettings(value: unknown): DiffSettings {
+  const raw = (value != null && typeof value === "object" ? value : {}) as Partial<Record<keyof DiffSettings, unknown>>
   const d = DEFAULT_DIFF_SETTINGS
   return {
     diffStyle: oneOf(raw.diffStyle, values(DIFF_STYLES), d.diffStyle),
@@ -196,41 +188,6 @@ function load(): DiffSettings {
     stickyHeader: flag(raw.stickyHeader, d.stickyHeader),
     fileHeader: flag(raw.fileHeader, d.fileHeader),
   }
-}
-
-let settings = load()
-const listeners = new Set<() => void>()
-
-function emit() {
-  for (const listener of listeners) listener()
-}
-
-// Keep other open tabs in step.
-window.addEventListener("storage", (event) => {
-  if (event.key !== KEY && event.key !== null) return
-  settings = load()
-  emit()
-})
-
-function subscribe(onChange: () => void) {
-  listeners.add(onChange)
-  return () => listeners.delete(onChange)
-}
-
-export function useDiffSettings(): DiffSettings {
-  return useSyncExternalStore(subscribe, () => settings)
-}
-
-export function updateDiffSettings(change: Partial<DiffSettings>) {
-  settings = { ...settings, ...change }
-  localStorage.setItem(KEY, JSON.stringify(settings))
-  emit()
-}
-
-export function resetDiffSettings() {
-  settings = DEFAULT_DIFF_SETTINGS
-  localStorage.removeItem(KEY)
-  emit()
 }
 
 /** The `@pierre/diffs` options these settings control. */

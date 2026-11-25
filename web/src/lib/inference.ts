@@ -1,8 +1,8 @@
 // Picks the inference credential for a job. Credentials come from the unlocked
 // vault; only a short-lived token is ever sent to the server, with each request.
 
-import { useState } from "react"
 import { api } from "@/lib/api"
+import { useSettings } from "@/lib/settings"
 import type { Credential } from "@/lib/types"
 import { getVault, vault, type ChatGptConnection, type VaultContents } from "@/lib/vault/store"
 
@@ -23,31 +23,11 @@ export function availableProviders(contents: VaultContents): Provider[] {
   return providers
 }
 
-const PROVIDER_KEY = "loupe.provider"
-const modelKey = (provider: Provider) => `loupe.model.${provider}`
-
-/** Provider and model choices. Not secret, so they live in localStorage. */
+/** The provider to use (your preferred one if it's connected) and its model. */
 export function useInferencePreferences(available: Provider[]) {
-  const [stored, setStored] = useState(() => localStorage.getItem(PROVIDER_KEY) as Provider | null)
-  const provider = stored && available.includes(stored) ? stored : (available[0] ?? null)
-  const [models, setModels] = useState<Record<string, string>>(() => ({
-    chatgpt: localStorage.getItem(modelKey("chatgpt")) ?? "",
-    api_key: localStorage.getItem(modelKey("api_key")) ?? "",
-  }))
-
-  return {
-    provider,
-    model: provider ? models[provider] : "",
-    setProvider(next: Provider) {
-      localStorage.setItem(PROVIDER_KEY, next)
-      setStored(next)
-    },
-    setModel(model: string) {
-      if (!provider) return
-      localStorage.setItem(modelKey(provider), model)
-      setModels((m) => ({ ...m, [provider]: model }))
-    },
-  }
+  const { inference } = useSettings()
+  const provider = inference.provider && available.includes(inference.provider) ? inference.provider : (available[0] ?? null)
+  return { provider, model: provider ? (inference.models[provider] ?? "") : "" }
 }
 
 const now = () => Math.floor(Date.now() / 1000)
