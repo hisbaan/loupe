@@ -6,7 +6,7 @@
 //! Every call and every byte of output counts against a per-review budget,
 //! because the whole conversation is resent on each turn.
 
-use std::fmt::Write;
+use std::{collections::BTreeSet, fmt::Write};
 
 use futures_util::future::join_all;
 use regex::RegexBuilder;
@@ -15,8 +15,6 @@ use serde_json::{Value, json};
 
 use crate::source::{Entry, MAX_BLOB_BYTES, Reader, Side, Tree};
 
-pub const MAX_CALLS: usize = 25;
-const MAX_OUTPUT_BYTES: usize = 150_000;
 const MAX_LIST_ENTRIES: usize = 300;
 const MAX_READ_LINES: usize = 400;
 const MAX_READ_BYTES: usize = 40_000;
@@ -103,23 +101,39 @@ struct GrepArgs {
     path_prefix: Option<String>,
 }
 
+/// How much a review may read through tools.
+#[derive(Debug, Clone, Copy)]
+pub struct Budget {
+    pub calls: usize,
+    pub output_bytes: usize,
+}
+
 pub struct Toolbox<R> {
     reader: R,
+    budget: Budget,
     calls: usize,
     output_bytes: usize,
+    files_read: BTreeSet<String>,
 }
 
 impl<R: Reader> Toolbox<R> {
-    pub fn new(reader: R) -> Self {
+    pub fn new(reader: R, budget: Budget) -> Self {
         Self {
             reader,
+            budget,
             calls: 0,
             output_bytes: 0,
+            files_read: BTreeSet::new(),
         }
     }
 
     pub fn exhausted(&self) -> bool {
-        self.calls >= MAX_CALLS || self.output_bytes >= MAX_OUTPUT_BYTES
+        self.calls >= self.budget.calls || self.output_bytes >= self.budget.output_bytes
+    }
+
+    /// Paths the model read, for the review's provenance.
+    pub fn files_read(self) -> Vec<String> {
+        self.files_read.into_iter().collect()
     }
 
     /// A short progress message for a call, e.g. "Reading src/main.rs".
@@ -161,7 +175,7 @@ impl<R: Reader> Toolbox<R> {
         };
         let mut output = result.unwrap_or_else(|err| format!("Error: {err}"));
 
-        let remaining = MAX_OUTPUT_BYTES.saturating_sub(self.output_bytes);
+        let remaining = self.budget.output_bytes.saturating_sub(self.output_bytes);
         if output.len() > remaining {
             output.truncate(floor_char_boundary(&output, remaining));
             output.push_str("\n[output cut off: tool output budget used up]");
@@ -232,7 +246,7 @@ impl<R: Reader> Toolbox<R> {
         Ok(out)
     }
 
-    async fn read_file(&self, args: ReadArgs) -> Result<String, String> {
+    async fn read_file(&mut self, args: ReadArgs) -> Result<String, String> {
         let tree = self.tree(args.side).await?;
         let entry = tree.get(&args.path).ok_or_else(|| {
             format!(
@@ -250,6 +264,7 @@ impl<R: Reader> Toolbox<R> {
             .await
             .map_err(|err| format!("couldn't read {}: {err}", entry.path))?;
         let text = as_text(&blob).ok_or_else(|| format!("{} is a binary file", entry.path))?;
+        self.files_read.insert(entry.path.clone());
 
         let lines: Vec<&str> = text.lines().collect();
         let total = lines.len();
@@ -400,11 +415,19 @@ mod tests {
             .iter()
             .map(|(p, c)| ((*p).to_owned(), c.as_bytes().to_vec()))
             .collect();
-        Toolbox::new(FakeReader {
-            head: Arc::new(Tree::new(entries, false)),
-            blobs,
-        })
+        Toolbox::new(
+            FakeReader {
+                head: Arc::new(Tree::new(entries, false)),
+                blobs,
+            },
+            BUDGET,
+        )
     }
+
+    const BUDGET: Budget = Budget {
+        calls: 5,
+        output_bytes: 150_000,
+    };
 
     #[test]
     fn definitions_are_strict() {
@@ -486,10 +509,34 @@ mod tests {
     #[tokio::test]
     async fn enforces_the_call_budget() {
         let mut tools = toolbox(&[]);
-        for _ in 0..MAX_CALLS {
+        for _ in 0..BUDGET.calls {
             tools.call("list_files", r#"{"side":"base","path_prefix":null}"#).await;
         }
         assert!(tools.exhausted());
         assert!(tools.call("list_files", "{}").await.contains("budget used up"));
+    }
+
+    #[tokio::test]
+    async fn records_files_read() {
+        let mut tools = toolbox(&[("src/a.rs", "fn a() {}\n"), ("src/b.rs", "fn b() {}\n")]);
+        tools
+            .call(
+                "read_file",
+                r#"{"side":"head","path":"src/b.rs","start_line":null,"end_line":null}"#,
+            )
+            .await;
+        tools
+            .call(
+                "read_file",
+                r#"{"side":"head","path":"src/b.rs","start_line":null,"end_line":null}"#,
+            )
+            .await;
+        tools
+            .call(
+                "read_file",
+                r#"{"side":"head","path":"missing.rs","start_line":null,"end_line":null}"#,
+            )
+            .await;
+        assert_eq!(tools.files_read(), vec!["src/b.rs"]);
     }
 }

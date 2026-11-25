@@ -5,7 +5,7 @@ use std::{convert::Infallible, future::Future, time::Duration};
 
 use axum::response::sse::{Event, KeepAlive, Sse};
 use futures_util::Stream;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio_stream::{StreamExt, wrappers::ReceiverStream};
@@ -18,8 +18,54 @@ use crate::{
     state::AppState,
 };
 
-/// Model turns per review, including the final answer.
-const MAX_TURNS: usize = 10;
+/// How hard a generation works: the model's reasoning effort, how much of the
+/// repository it may read, and how many turns it gets.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Effort {
+    Quick,
+    #[default]
+    Standard,
+    Thorough,
+}
+
+impl Effort {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Quick => "quick",
+            Self::Standard => "standard",
+            Self::Thorough => "thorough",
+        }
+    }
+
+    /// The Responses API's `reasoning.effort`.
+    fn reasoning(self) -> &'static str {
+        match self {
+            Self::Quick => "low",
+            Self::Standard => "medium",
+            Self::Thorough => "high",
+        }
+    }
+
+    /// Every tool round resends the whole conversation, so output is capped too.
+    pub fn budget(self) -> tools::Budget {
+        let (calls, output_bytes) = match self {
+            Self::Quick => (8, 60_000),
+            Self::Standard => (25, 150_000),
+            Self::Thorough => (50, 250_000),
+        };
+        tools::Budget { calls, output_bytes }
+    }
+
+    /// Model turns, including the final answer.
+    fn max_turns(self) -> usize {
+        match self {
+            Self::Quick => 5,
+            Self::Standard => 10,
+            Self::Thorough => 16,
+        }
+    }
+}
 
 /// Sends progress events to the browser. Every event is JSON with a `type`:
 /// `status`, `generating`, `done` or `error`.
@@ -89,6 +135,7 @@ pub struct Generation<'a> {
     pub state: &'a AppState,
     pub credential: &'a Credential,
     pub model: &'a str,
+    pub effort: Effort,
     pub reporter: &'a Reporter,
     pub instructions: &'a str,
     /// The prompt's random delimiter; tool output is wrapped in it.
@@ -100,9 +147,16 @@ pub struct Generation<'a> {
     pub toolbox: Option<Toolbox<Source>>,
 }
 
+/// What a generation produced.
+pub struct Output {
+    /// The model's final JSON text.
+    pub text: String,
+    /// Repository files the model read, for provenance.
+    pub files_read: Vec<String>,
+}
+
 impl Generation<'_> {
-    /// Returns the model's final JSON text.
-    pub async fn run(mut self) -> Result<String, String> {
+    pub async fn run(mut self) -> Result<Output, String> {
         let definitions = if self.toolbox.is_some() {
             tools::definitions()
         } else {
@@ -110,7 +164,8 @@ impl Generation<'_> {
         };
         let mut input = vec![inference::user_message(self.input)];
 
-        for turn_number in 1..=MAX_TURNS {
+        let max_turns = self.effort.max_turns();
+        for turn_number in 1..=max_turns {
             self.reporter.status("Generating").await;
             let exhausted = self.toolbox.as_ref().is_none_or(Toolbox::exhausted);
             let turn = inference::respond(
@@ -119,12 +174,13 @@ impl Generation<'_> {
                 self.credential,
                 inference::Request {
                     model: self.model,
+                    reasoning_effort: self.effort.reasoning(),
                     instructions: self.instructions,
                     input: &input,
                     schema_name: self.schema_name,
                     schema: self.schema.clone(),
                     tools: &definitions,
-                    forbid_tools: exhausted || turn_number == MAX_TURNS,
+                    forbid_tools: exhausted || turn_number == max_turns,
                 },
                 |chars| self.reporter.generating(chars),
             )
@@ -133,7 +189,10 @@ impl Generation<'_> {
 
             let calls: Vec<_> = turn.function_calls().collect();
             if calls.is_empty() {
-                return Ok(turn.text);
+                return Ok(Output {
+                    text: turn.text,
+                    files_read: self.toolbox.map(Toolbox::files_read).unwrap_or_default(),
+                });
             }
             let Some(toolbox) = self.toolbox.as_mut() else {
                 return Err("The model asked for tools that weren't offered.".into());

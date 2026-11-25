@@ -224,6 +224,16 @@ export type GuidedReview = {
   questions: string[]
 }
 
+// Mirrors api/src/reviews/job.rs.
+export type Effort = "quick" | "standard" | "thorough"
+
+/** What every generation job is sent. */
+export type JobRequest = {
+  credential: Credential
+  model: string
+  effort: Effort
+}
+
 // Mirrors api/src/reviews.
 export type ReviewRecord = {
   id: number
@@ -232,6 +242,9 @@ export type ReviewRecord = {
   base_sha: string
   head_sha: string
   created_at: number
+  effort: Effort
+  /** Repository files the model read. */
+  files_read: string[]
   requested_by: { login: string; avatar_url: string | null }
   /** Covers the pull request's current base and head commits. */
   current: boolean
@@ -305,6 +318,8 @@ export type SelfReviewRecord = {
   base_sha: string
   head_sha: string
   created_at: number
+  effort: Effort
+  files_read: string[]
   current: boolean
   review: SelfReview
   notes: SelfReviewNotes

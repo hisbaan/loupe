@@ -71,8 +71,8 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
 
   const generate =
     (basedOn?: number): GenerateAction["run"] =>
-    (credential, model, onProgress) =>
-      api.generateReview(owner, repo, number, { credential, model, based_on: basedOn }, (progress) => {
+    (job, onProgress) =>
+      api.generateReview(owner, repo, number, { ...job, based_on: basedOn }, (progress) => {
         if (progress.type === "done") addReview(progress.record)
         onProgress(progress)
       })

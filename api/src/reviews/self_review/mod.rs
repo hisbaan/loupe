@@ -20,7 +20,10 @@ use loupe_protocol::self_review::{SELF_REVIEW_SCHEMA_VERSION, SelfReview};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{job, tools};
+use super::{
+    job::{self, Effort},
+    tools,
+};
 use crate::{
     auth::CurrentUser,
     error::{AppError, AppResult},
@@ -52,6 +55,9 @@ struct SelfReviewRecord {
     base_sha: String,
     head_sha: String,
     created_at: i64,
+    effort: String,
+    /// Repository files the model read.
+    files_read: Vec<String>,
     /// Covers the pull request's current base and head commits.
     current: bool,
     review: SelfReview,
@@ -65,6 +71,8 @@ struct Row {
     base_sha: String,
     head_sha: String,
     created_at: i64,
+    effort: String,
+    files_read: String,
     review_json: String,
     notes_json: String,
 }
@@ -78,6 +86,8 @@ impl Row {
             base_sha: self.base_sha,
             head_sha: self.head_sha,
             created_at: self.created_at,
+            effort: self.effort,
+            files_read: serde_json::from_str(&self.files_read).unwrap_or_default(),
             review: serde_json::from_str(&self.review_json).map_err(anyhow::Error::from)?,
             notes: serde_json::from_str(&self.notes_json).unwrap_or_else(|_| Value::Object(Default::default())),
         })
@@ -87,7 +97,7 @@ impl Row {
 /// A macro so queries can `concat!` onto it and stay `&'static str`.
 macro_rules! select {
     () => {
-        "SELECT id, model, base_sha, head_sha, created_at, review_json, notes_json FROM self_reviews "
+        "SELECT id, model, base_sha, head_sha, created_at, effort, files_read, review_json, notes_json FROM self_reviews "
     };
 }
 
@@ -127,6 +137,8 @@ async fn list(
 struct Create {
     credential: Credential,
     model: String,
+    #[serde(default)]
+    effort: Effort,
 }
 
 async fn create(
@@ -147,6 +159,7 @@ async fn create(
             &repo,
             number,
             &model,
+            body.effort,
             &body.credential,
             &reporter,
         )
@@ -162,6 +175,7 @@ async fn run(
     repo: &str,
     number: u64,
     model: &str,
+    effort: Effort,
     credential: &Credential,
     reporter: &job::Reporter,
 ) -> Result<SelfReviewRecord, String> {
@@ -186,17 +200,19 @@ async fn run(
     let use_tools = prompt.input.len() <= MAX_TOOL_INPUT_CHARS;
     let mut instructions = prompt::INSTRUCTIONS.to_owned();
     let toolbox = if use_tools {
-        instructions.push_str(super::prompt::TOOL_INSTRUCTIONS);
+        instructions.push_str(&super::prompt::tool_instructions(effort.budget().calls));
         Some(tools::Toolbox::new(
             Source::new(state.clone(), token, &pr).map_err(err)?,
+            effort.budget(),
         ))
     } else {
         None
     };
-    let raw = job::Generation {
+    let output = job::Generation {
         state,
         credential,
         model,
+        effort,
         reporter,
         instructions: &instructions,
         tag: &prompt.tag,
@@ -207,15 +223,15 @@ async fn run(
     }
     .run()
     .await?;
-    let review = output::parse(&raw, &pr).map_err(|e| format!("The model's self-review was invalid: {e}"))?;
+    let review = output::parse(&output.text, &pr).map_err(|e| format!("The model's self-review was invalid: {e}"))?;
 
     reporter.status("Saving").await;
     let review_json = serde_json::to_string(&review).map_err(|e| err(AppError::Internal(e.into())))?;
     let row: Row = sqlx::query_as(
         "INSERT INTO self_reviews (user_id, repo_id, pr_number, base_sha, head_sha, model, prompt_version,
-                                   schema_version, review_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         RETURNING id, model, base_sha, head_sha, created_at, review_json, notes_json",
+                                   schema_version, review_json, effort, files_read)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         RETURNING id, model, base_sha, head_sha, created_at, effort, files_read, review_json, notes_json",
     )
     .bind(user.id)
     .bind(repo_id)
@@ -226,6 +242,8 @@ async fn run(
     .bind(prompt::PROMPT_VERSION)
     .bind(SELF_REVIEW_SCHEMA_VERSION as i64)
     .bind(&review_json)
+    .bind(effort.as_str())
+    .bind(serde_json::to_string(&output.files_read).unwrap_or_else(|_| "[]".into()))
     .fetch_one(&state.db)
     .await
     .map_err(|e| err(e.into()))?;

@@ -18,6 +18,7 @@ use futures_util::Stream;
 use loupe_protocol::review::{GuidedReview, SCHEMA_VERSION};
 use serde::{Deserialize, Serialize};
 
+use self::job::Effort;
 use crate::{
     auth::CurrentUser,
     error::{AppError, AppResult},
@@ -46,6 +47,9 @@ pub struct ReviewRecord {
     base_sha: String,
     head_sha: String,
     created_at: i64,
+    effort: String,
+    /// Repository files the model read.
+    files_read: Vec<String>,
     requested_by: Author,
     /// Covers the pull request's current base and head commits.
     current: bool,
@@ -80,6 +84,8 @@ struct ReviewRow {
     base_sha: String,
     head_sha: String,
     created_at: i64,
+    effort: String,
+    files_read: String,
     requested_by: i64,
     login: String,
     avatar_url: Option<String>,
@@ -119,6 +125,8 @@ impl ReviewRow {
             base_sha: self.base_sha,
             head_sha: self.head_sha,
             created_at: self.created_at,
+            effort: self.effort,
+            files_read: serde_json::from_str(&self.files_read).unwrap_or_default(),
             trust,
             auto_load,
             requested_by_author: self.login.eq_ignore_ascii_case(&pull.user.login),
@@ -138,7 +146,8 @@ impl ReviewRow {
 /// A macro so queries can `concat!` onto it and stay `&'static str`.
 macro_rules! select_review {
     () => {
-        "SELECT r.id, r.model, r.prompt_version, r.base_sha, r.head_sha, r.created_at, r.requested_by,
+        "SELECT r.id, r.model, r.prompt_version, r.base_sha, r.head_sha, r.created_at, r.effort, r.files_read,
+            r.requested_by,
             u.login, u.avatar_url, r.review_json, bu.login AS based_on_login, b.head_sha AS based_on_head_sha
          FROM reviews r JOIN users u ON u.id = r.requested_by
          LEFT JOIN reviews b ON b.id = r.based_on LEFT JOIN users bu ON bu.id = b.requested_by "
@@ -199,6 +208,8 @@ async fn list_reviews(
 struct CreateReview {
     credential: Credential,
     model: String,
+    #[serde(default)]
+    effort: Effort,
     /// An earlier review of this pull request (yours or a trusted reviewer's)
     /// to update: unchanged hunks keep their assessments.
     based_on: Option<i64>,
@@ -225,6 +236,7 @@ async fn create_review(
             repo,
             number,
             model,
+            effort: body.effort,
             credential: body.credential,
             based_on: body.based_on,
             reporter,
@@ -241,6 +253,7 @@ struct Job {
     repo: String,
     number: u64,
     model: String,
+    effort: Effort,
     credential: Credential,
     based_on: Option<i64>,
     reporter: job::Reporter,
@@ -316,7 +329,7 @@ impl Job {
         let use_tools = prompt.input.len() <= prompt::MAX_TOOL_INPUT_CHARS;
         let mut instructions = prompt::INSTRUCTIONS.to_owned();
         if use_tools {
-            instructions.push_str(prompt::TOOL_INSTRUCTIONS);
+            instructions.push_str(&prompt::tool_instructions(self.effort.budget().calls));
         }
         if previous.is_some() {
             instructions.push_str(prompt::UPDATE_INSTRUCTIONS);
@@ -324,13 +337,15 @@ impl Job {
         let toolbox = match use_tools {
             true => Some(tools::Toolbox::new(
                 Source::new(self.state.clone(), token, &pr).map_err(app_err)?,
+                self.effort.budget(),
             )),
             false => None,
         };
-        let raw = job::Generation {
+        let output = job::Generation {
             state: &self.state,
             credential: &self.credential,
             model: &self.model,
+            effort: self.effort,
             reporter: &self.reporter,
             instructions: &instructions,
             tag: &prompt.tag,
@@ -342,17 +357,18 @@ impl Job {
         .run()
         .await?;
 
-        let review = output::parse(&raw, &prompt.required_hunks, &carried)
+        let review = output::parse(&output.text, &prompt.required_hunks, &carried)
             .map_err(|err| format!("The model's review was invalid: {err}"))?;
 
         self.reporter.status("Saving").await;
         let review_json = serde_json::to_string(&review).map_err(|e| app_err(AppError::Internal(e.into())))?;
         let id: i64 = sqlx::query_scalar(
             "INSERT INTO reviews (repo_id, pr_number, base_sha, head_sha, model, prompt_version, schema_version,
-                                  requested_by, based_on, review_json)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  requested_by, based_on, review_json, effort, files_read)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (repo_id, pr_number, base_sha, head_sha, model, prompt_version, schema_version, requested_by)
-             DO UPDATE SET based_on = excluded.based_on, review_json = excluded.review_json, created_at = unixepoch()
+             DO UPDATE SET based_on = excluded.based_on, review_json = excluded.review_json, effort = excluded.effort,
+                           files_read = excluded.files_read, created_at = unixepoch()
              RETURNING id",
         )
         .bind(repo_id)
@@ -365,6 +381,8 @@ impl Job {
         .bind(self.user.id)
         .bind(base.as_ref().map(|b| b.id))
         .bind(&review_json)
+        .bind(self.effort.as_str())
+        .bind(serde_json::to_string(&output.files_read).unwrap_or_else(|_| "[]".into()))
         .fetch_one(&self.state.db)
         .await
         .map_err(|e| app_err(e.into()))?;

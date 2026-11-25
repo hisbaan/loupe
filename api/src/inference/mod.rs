@@ -47,6 +47,8 @@ impl std::fmt::Debug for Credential {
 
 pub struct Request<'a> {
     pub model: &'a str,
+    /// `low`, `medium` or `high`.
+    pub reasoning_effort: &'a str,
     pub instructions: &'a str,
     /// The whole conversation so far: Sign in with ChatGPT doesn't support
     /// `previous_response_id`, and `store: false` means nothing is kept
@@ -112,6 +114,7 @@ pub async fn respond(
         "model": request.model,
         "instructions": request.instructions,
         "input": request.input,
+        "reasoning": { "effort": request.reasoning_effort },
         "text": {
             "format": {
                 "type": "json_schema",
@@ -249,6 +252,7 @@ mod tests {
     fn request() -> Request<'static> {
         Request {
             model: "m",
+            reasoning_effort: "medium",
             instructions: "i",
             input: &[],
             schema_name: "s",

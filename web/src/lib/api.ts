@@ -4,6 +4,7 @@ import type {
   Credential,
   Discussion,
   JobProgress,
+  JobRequest,
   LineCommentRequest,
   Me,
   NewVaultKey,
@@ -137,7 +138,7 @@ export const api = {
     owner: string,
     repo: string,
     number: number,
-    body: { credential: Credential; model: string; based_on?: number },
+    body: JobRequest & { based_on?: number },
     onProgress: (progress: JobProgress<ReviewRecord>) => void,
   ) => runJob(`${pullPath(owner, repo, number)}/reviews`, body, onProgress),
 
@@ -147,7 +148,7 @@ export const api = {
     owner: string,
     repo: string,
     number: number,
-    body: { credential: Credential; model: string },
+    body: JobRequest,
     onProgress: (progress: JobProgress<SelfReviewRecord>) => void,
   ) => runJob(`${pullPath(owner, repo, number)}/self-reviews`, body, onProgress),
   saveSelfReviewNotes: (id: number, notes: SelfReviewNotes) =>

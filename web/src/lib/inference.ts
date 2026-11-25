@@ -23,11 +23,11 @@ export function availableProviders(contents: VaultContents): Provider[] {
   return providers
 }
 
-/** The provider to use (your preferred one if it's connected) and its model. */
+/** The provider to use (your preferred one if it's connected), its model and the effort. */
 export function useInferencePreferences(available: Provider[]) {
   const { inference } = useSettings()
   const provider = inference.provider && available.includes(inference.provider) ? inference.provider : (available[0] ?? null)
-  return { provider, model: provider ? (inference.models[provider] ?? "") : "" }
+  return { provider, model: provider ? (inference.models[provider] ?? "") : "", effort: inference.effort }
 }
 
 const now = () => Math.floor(Date.now() / 1000)

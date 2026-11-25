@@ -1,6 +1,7 @@
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs"
 import { useEffect, useRef, useState } from "react"
 import { DiffColumn } from "@/components/diff-column"
+import { FilesRead } from "@/components/files-read"
 import { GenerateControls } from "@/components/generate-controls"
 import { ReviewColumns } from "@/components/review-columns"
 import { CommentNote, FindingNote } from "@/components/self-review-notes"
@@ -138,8 +139,8 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
             actions={[
               {
                 label: records.some((r) => r.current) ? "Run self-review again" : "Run self-review",
-                run: (credential, model, onProgress) =>
-                  api.generateSelfReview(owner, repo, number, { credential, model }, (progress) => {
+                run: (job, onProgress) =>
+                  api.generateSelfReview(owner, repo, number, job, (progress) => {
                     if (progress.type === "done") {
                       setRecords((rs) => [progress.record, ...rs])
                       setSelectedId(progress.record.id)
@@ -180,8 +181,8 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
       {record ? (
         <section className="mb-6 rounded-md border border-neutral-200 p-4 dark:border-neutral-800">
           <p className="text-xs text-neutral-500">
-            Self-review by {record.model} {timeAgo(record.created_at)} · {plural(record.review.findings.length, "finding")}{" "}
-            · only you can see this
+            Self-review by {record.model} ({record.effort}) {timeAgo(record.created_at)} ·{" "}
+            {plural(record.review.findings.length, "finding")} · only you can see this · <FilesRead files={record.files_read} />
           </p>
           {!record.current && (
             <p className="mt-2 text-sm text-amber-600">

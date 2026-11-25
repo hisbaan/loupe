@@ -15,7 +15,14 @@ import {
   THEME_TYPES,
 } from "@/lib/diff-settings"
 import { PROVIDER_LABELS, availableProviders, credentialFor, useInferencePreferences, type Provider } from "@/lib/inference"
-import { resetDiffSettings, updateDiffSettings, updateInferenceSettings, useDiffSettings, useSettings } from "@/lib/settings"
+import {
+  EFFORTS,
+  resetDiffSettings,
+  updateDiffSettings,
+  updateInferenceSettings,
+  useDiffSettings,
+  useSettings,
+} from "@/lib/settings"
 import { timeAgo } from "@/lib/utils"
 import { currentLogin, passphraseProblem, useVault, vault, type VaultContents } from "@/lib/vault/store"
 import type { TrustedReviewer, VaultKeyRecord } from "@/lib/types"
@@ -177,6 +184,15 @@ function ReviewSection({ contents }: { contents: VaultContents | null }) {
             ))}
           </datalist>
         </label>
+        <SelectRow
+          label="Effort"
+          value={inference.effort}
+          choices={EFFORTS}
+          onChange={(effort) => updateInferenceSettings({ effort })}
+        />
+        <p className="text-neutral-500">
+          {EFFORTS.find((e) => e.value === inference.effort)?.description} You can also switch it beside a review.
+        </p>
         {contents == null && <p className="text-neutral-500">Unlock your vault below to load the list of models.</p>}
         {error && <p className="text-red-600">{error}</p>}
       </div>

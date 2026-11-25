@@ -6,13 +6,22 @@ import { useSyncExternalStore } from "react"
 import { api } from "@/lib/api"
 import { DEFAULT_DIFF_SETTINGS, parseDiffSettings, type DiffSettings } from "@/lib/diff-settings"
 import type { Provider } from "@/lib/inference"
+import type { Effort } from "@/lib/types"
 
 export type InferenceSettings = {
   /** Preferred when more than one is connected. */
   provider: Provider | null
   /** The model to use with each provider. */
   models: Partial<Record<Provider, string>>
+  effort: Effort
 }
+
+/** Mirrors api/src/reviews/job.rs `Effort`. */
+export const EFFORTS: { value: Effort; label: string; description: string }[] = [
+  { value: "quick", label: "Quick", description: "Low reasoning effort; reads up to 8 files or searches." },
+  { value: "standard", label: "Standard", description: "Medium reasoning effort; up to 25 reads or searches." },
+  { value: "thorough", label: "Thorough", description: "High reasoning effort; up to 50 reads or searches. Slower." },
+]
 
 export type Settings = {
   diff: DiffSettings
@@ -34,7 +43,12 @@ function parseInference(value: unknown): InferenceSettings {
       if (typeof model === "string" && model.length <= 100) models[provider] = model
     }
   }
-  return { provider: PROVIDERS.includes(raw.provider as Provider) ? (raw.provider as Provider) : null, models }
+  const efforts = EFFORTS.map((e) => e.value)
+  return {
+    provider: PROVIDERS.includes(raw.provider as Provider) ? (raw.provider as Provider) : null,
+    models,
+    effort: efforts.includes(raw.effort as Effort) ? (raw.effort as Effort) : "standard",
+  }
 }
 
 /** Fills in defaults for anything missing or unrecognised. */
