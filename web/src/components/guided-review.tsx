@@ -1,21 +1,21 @@
 import type { DiffLineAnnotation } from "@pierre/diffs"
 import { useEffect, useState } from "react"
-import { DiffColumn } from "@/components/diff-column"
+import { FindingList, FindingNote } from "@/components/finding-note"
 import { GenerateControls, type GenerateAction } from "@/components/generate-controls"
 import { HunkNote } from "@/components/hunk-note"
 import { ReviewColumns } from "@/components/review-columns"
 import { ReviewList } from "@/components/review-list"
 import { ReviewOffer } from "@/components/review-offer"
+import { ReviewContents, ReviewDiff } from "@/components/review-sections"
 import { ReviewSummary } from "@/components/review-summary"
 import { LineCommentForm, ThreadView, type DraftLineComment } from "@/components/review-thread"
 import { noteClass } from "@/components/ui"
-import { Walkthrough } from "@/components/walkthrough"
 import { api } from "@/lib/api"
 import { lineRange, threadPlacements, type DiscussionState } from "@/lib/discussion"
-import { defaultOrder, splitCollapsed } from "@/lib/patch"
-import { assessmentAnnotations, autoSelected, shortSha, updatableReview } from "@/lib/reviews"
-import { fileAnchor, githubFileUrl } from "@/lib/utils"
-import type { AnalyzedFile, HunkAssessment, PullResponse, ReviewRecord, ReviewThread } from "@/lib/types"
+import { reviewLayout } from "@/lib/review-layout"
+import { autoSelected, findingAnnotations, hunkNoteAnnotations, shortSha, updatableReview } from "@/lib/reviews"
+import { githubFileUrl } from "@/lib/utils"
+import type { AnalyzedFile, Finding, PullResponse, ReviewRecord, ReviewThread } from "@/lib/types"
 
 type GuidedReviewProps = {
   owner: string
@@ -26,7 +26,8 @@ type GuidedReviewProps = {
 }
 
 type Note =
-  | { kind: "assessment"; assessment: HunkAssessment }
+  | { kind: "note"; note: string }
+  | { kind: "finding"; finding: Finding }
   | { kind: "thread"; thread: ReviewThread }
   | { kind: "draft"; draft: DraftLineComment }
 /** @pierre/diffs distributes over union metadata types, so wrap the union. */
@@ -63,11 +64,9 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
     setSelectedId(added.id)
   }
 
-  const fileByHunk = new Map(files.flatMap((f) => f.analysis.hunks.map((h) => [h.id, f.filename] as const)))
-  function selectHunk(hunkId: string) {
-    const filename = fileByHunk.get(hunkId)
-    if (filename) document.getElementById(fileAnchor(filename))?.scrollIntoView({ behavior: "smooth" })
-  }
+  // A finding's line numbers only hold while its hunk is unchanged.
+  const hunkIds = new Set(files.flatMap((f) => f.analysis.hunks.map((h) => h.id)))
+  const findings = record?.review.findings.filter((f) => hunkIds.has(f.hunk_id)) ?? []
 
   const generate =
     (basedOn?: number): GenerateAction["run"] =>
@@ -83,9 +82,10 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
   function annotationsFor(file: AnalyzedFile): DiffLineAnnotation<Annotated>[] {
     const wrap = (note: Note): Annotated => ({ note })
     return [
-      ...assessmentAnnotations(file, record?.review.hunks).map((a) => ({
+      ...hunkNoteAnnotations(file, record?.review).map((a) => ({ ...a, metadata: wrap({ kind: "note", note: a.metadata }) })),
+      ...findingAnnotations(findings, file.filename).map((a) => ({
         ...a,
-        metadata: wrap({ kind: "assessment", assessment: a.metadata }),
+        metadata: wrap({ kind: "finding", finding: a.metadata }),
       })),
       ...(canComment
         ? threadPlacements(loaded.threads, file.filename).map(({ side, lineNumber, thread }) => ({
@@ -116,8 +116,10 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
 
   function renderNote({ note }: Annotated) {
     switch (note.kind) {
-      case "assessment":
-        return <HunkNote assessment={note.assessment} />
+      case "note":
+        return <HunkNote note={note.note} baseUrl={pull.html_url} />
+      case "finding":
+        return <FindingNote finding={note.finding} baseUrl={pull.html_url} />
       case "thread":
         return <ThreadView thread={note.thread} write={discussion.write} className={noteClass} />
       case "draft":
@@ -134,14 +136,14 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
     }
   }
 
-  const layout = splitCollapsed(files)
+  const layout = reviewLayout(record?.review ?? null, files)
   const hasMine = reviews.some((r) => r.current && r.trust === "mine")
   const updateFrom = updatableReview(reviews)
   const actions: GenerateAction[] = [{ label: hasMine ? "Regenerate review" : "Generate guided review", run: generate() }]
   if (updateFrom) {
     actions.push({
       label: `Update ${updateFrom.trust === "mine" ? "your" : `@${updateFrom.requested_by.login}'s`} review of ${shortSha(updateFrom.head_sha)}`,
-      title: "Keeps assessments of unchanged hunks and reviews only what's new",
+      title: "Keeps findings and notes on unchanged hunks and reviews only what's new",
       secondary: true,
       run: generate(updateFrom.id),
     })
@@ -152,7 +154,8 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
       aside={
         <>
           <GenerateControls actions={actions} />
-          {record && <Walkthrough review={record.review} onSelectHunk={selectHunk} />}
+          {record && <ReviewContents review={record.review} layout={layout} />}
+          {record && <FindingList findings={findings} empty="No findings." />}
           {reviews.length > 1 && (
             <ReviewList reviews={reviews} selectedId={record?.id ?? null} onSelect={(r) => setSelectedId(r.id)} />
           )}
@@ -167,10 +170,11 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
           onDismiss={() => setOfferDismissed(true)}
         />
       )}
-      {record && <ReviewSummary record={record} files={files} />}
-      <DiffColumn
-        groups={[{ key: "files", slices: defaultOrder(layout.review) }]}
-        collapsed={layout.collapsed}
+      {record && <ReviewSummary record={record} files={files} baseUrl={pull.html_url} />}
+      <ReviewDiff
+        review={record?.review ?? null}
+        layout={layout}
+        baseUrl={pull.html_url}
         annotationsFor={annotationsFor}
         renderAnnotation={renderNote}
         onAddComment={canComment ? (file, range) => setDraft({ path: file.filename, ...lineRange(range) }) : undefined}

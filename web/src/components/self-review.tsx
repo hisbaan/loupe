@@ -1,18 +1,18 @@
 import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs"
 import { useEffect, useRef, useState } from "react"
-import { DiffColumn } from "@/components/diff-column"
 import { FilesRead } from "@/components/files-read"
+import { FindingList, FindingNote } from "@/components/finding-note"
 import { GenerateControls } from "@/components/generate-controls"
+import { Markdown } from "@/components/markdown"
 import { ReviewColumns } from "@/components/review-columns"
-import { CommentNote, FindingNote } from "@/components/self-review-notes"
-import { SeverityBadge } from "@/components/severity-badge"
+import { ReviewContents, ReviewDiff } from "@/components/review-sections"
+import { CommentNote } from "@/components/self-review-notes"
 import { errorMessage, secondaryButtonClass } from "@/components/ui"
 import { api } from "@/lib/api"
 import { lineRange } from "@/lib/discussion"
-import { defaultOrder, splitCollapsed } from "@/lib/patch"
+import { reviewLayout } from "@/lib/review-layout"
 import { shortSha } from "@/lib/reviews"
 import {
-  SEVERITY_ORDER,
   exportItems,
   exportMarkdown,
   findingBody,
@@ -21,7 +21,7 @@ import {
   setFinding,
   upsertComment,
 } from "@/lib/self-review"
-import { cn, fileAnchor, githubFileUrl, timeAgo } from "@/lib/utils"
+import { githubFileUrl, timeAgo } from "@/lib/utils"
 import type { Finding, PullResponse, ReviewComment, SelfReviewNotes, SelfReviewRecord } from "@/lib/types"
 
 type SelfReviewProps = {
@@ -109,9 +109,12 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
       return (
         <FindingNote
           finding={finding}
-          status={findingStatus(notes, finding.id)}
-          body={findingBody(notes, finding)}
-          onDecide={(decision) => updateNotes((n) => setFinding(n, finding.id, decision))}
+          baseUrl={pull.html_url}
+          decision={{
+            status: findingStatus(notes, finding.id),
+            body: findingBody(notes, finding),
+            onDecide: (decision) => updateNotes((n) => setFinding(n, finding.id, decision)),
+          }}
         />
       )
     }
@@ -129,7 +132,8 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
     )
   }
 
-  const layout = splitCollapsed(files)
+  // An earlier commit's sections still group the hunks that are unchanged.
+  const layout = reviewLayout(record?.review ?? null, files)
 
   return (
     <ReviewColumns
@@ -157,7 +161,14 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
               counts={exportItems(record, notes)}
             />
           )}
-          {record && <FindingList findings={record.review.findings} notes={notes} />}
+          {record && <ReviewContents review={record.review} layout={layout} />}
+          {record && (
+            <FindingList
+              findings={record.review.findings}
+              statusOf={(f) => findingStatus(notes, f.id)}
+              empty="No problems found."
+            />
+          )}
           {records.length > 1 && (
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium tracking-wide text-neutral-500 uppercase">Earlier runs</span>
@@ -190,7 +201,9 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
               diff and exports leave out code snippets. Run it again for the latest commit.
             </p>
           )}
-          <p className="mt-2">{record.review.summary}</p>
+          <Markdown baseUrl={pull.html_url} links={false} className="mt-2">
+            {record.review.summary}
+          </Markdown>
           {saveError && <p className="mt-2 text-sm text-red-600">{saveError}</p>}
         </section>
       ) : (
@@ -200,49 +213,16 @@ export function SelfReview({ owner, repo, number, pr }: SelfReviewProps) {
           agent. Only you can see it.
         </section>
       )}
-      <DiffColumn
-        groups={[{ key: "files", slices: defaultOrder(layout.review) }]}
-        collapsed={layout.collapsed}
+      <ReviewDiff
+        review={record?.review ?? null}
+        layout={layout}
+        baseUrl={pull.html_url}
         annotationsFor={(file) => annotationsFor(file.filename)}
         renderAnnotation={renderNote}
         onAddComment={record?.current ? (file, range) => addComment(file.filename, range) : undefined}
         githubUrl={(file) => githubFileUrl(pull, file)}
       />
     </ReviewColumns>
-  )
-}
-
-function FindingList({ findings, notes }: { findings: Finding[]; notes: SelfReviewNotes }) {
-  const sorted = [...findings].sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity))
-  if (sorted.length === 0) return <p className="text-sm text-neutral-500">No problems found.</p>
-  return (
-    <div className="flex flex-col gap-1">
-      <h2 className="text-xs font-medium tracking-wide text-neutral-500 uppercase">Findings</h2>
-      {sorted.map((f) => {
-        const status = findingStatus(notes, f.id)
-        return (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => document.getElementById(fileAnchor(f.path))?.scrollIntoView({ behavior: "smooth" })}
-            className={cn(
-              "flex flex-col gap-1 rounded-md p-2 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-900",
-              status === "dismissed" && "opacity-50",
-            )}
-          >
-            <span className="flex items-center gap-2">
-              <SeverityBadge severity={f.severity} />
-              {status === "accepted" && <span className="text-xs text-green-700 dark:text-green-400">accepted</span>}
-              {status === "dismissed" && <span className="text-xs text-neutral-500">dismissed</span>}
-            </span>
-            <span className={cn(status === "dismissed" && "line-through")}>{f.title}</span>
-            <span className="truncate font-mono text-xs text-neutral-500">
-              {f.path}:{f.start_line}
-            </span>
-          </button>
-        )
-      })}
-    </div>
   )
 }
 

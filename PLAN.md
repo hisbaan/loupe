@@ -45,15 +45,15 @@ The model can't execute anything: the server gets text back and validates it aga
 Blobs are immutable, so they're cached forever by `(repo_id, blob_sha)`, still behind access checks. No GitHub code search exists for PR heads: `grep` runs in-process (Rust `regex`, linear time) over a capped set of fetched files. Per-review budgets: ~30 tool calls, byte and line caps. SIWC has no `previous_response_id` over HTTP, so the server resends the conversation each round; keep tool output trimmed.
 
 ## Review schema
-`crates/protocol/src/review.rs`: summary, walkthrough steps (with optional mermaid diagram), per-hunk importance, rationale and concerns, questions. Versioned; cache keys include `SCHEMA_VERSION`.
+`crates/protocol/src/review.rs`, shared by guided reviews and self-reviews (only the prompt differs): a markdown overview; sections that group hunks by what they do (not by file), ordered by importance, each with an attention level (review closely / read / skim), prose shown above its code and an optional mermaid diagram; findings pinned to line ranges inside a hunk, with severity and category; optional short hunk notes; questions for the author. Every reviewable hunk must be in exactly one section. Versioned; cache keys include `SCHEMA_VERSION`.
 
 Cache keys:
 - Whole review: `(repo_id, pr, base_sha, head_sha, model, prompt_version, schema_version, instructions_hash)`
 - Per file: `(repo_id, patch_hash, model, prompt_version)`, for incremental re-review after a push.
 
 ## Features
-- **Guided review**: walkthrough sidebar drives scroll; low-importance and deterministic hunks are collapsed; rationale as `@pierre/diffs` line annotations.
-- **Mermaid diagrams**: the model adds a flow diagram to a step when useful. Drawn with lazy-loaded `pele` (flowcharts and sequence diagrams only, links and images off), show source on parse failure.
+- **Guided review**: the diff column follows the review's sections, most important first, each introduced by its prose; findings and notes are `@pierre/diffs` line annotations; changes no section places come next, then what the pre-pass collapsed, grouped by kind. The sidebar lists sections and findings. Without a review, files are ordered code, tests, config, docs.
+- **Mermaid diagrams**: the model adds a flow diagram to a section when useful. Drawn with lazy-loaded `pele` (flowcharts and sequence diagrams only, links and images off), show source on parse failure.
 - **Review on GitHub from Loupe**: GitHub's review threads inline in the diff, replies, resolve, line comments into your pending review, and submitting comment / approve / request changes, so you never need github.com to review.
 - **Stacks**: stacked pull requests shown as a stack (GitHub's stacks, or branch chains), each layer reviewed on its own with the rest of the stack as context.
 - **Self-review**: draft PRs or any `base...head`. A problem-finding prompt; human comments plus AI suggestions to accept, edit or dismiss; export markdown pinned to head SHA with `path:line` ranges and snippets for a coding agent.
@@ -71,7 +71,7 @@ Cache keys:
    - [ ] Follow-up: honour `linguist-generated` from `.gitattributes` *at the base SHA* (the PR can edit it at head).
 3. [x] Guided review with a pasted API key: prompt (`api/src/reviews/prompt.rs`), strict structured output, SSE progress, coverage validation, review cache keyed by (repo, PR, base, head, model, prompt, schema) and access-checked by refetching the PR with the reader's token.
    - [ ] Large PRs: per-file pass + synthesis instead of the single-pass size limit.
-   - [ ] One repair retry when the model skips hunks.
+   - [x] One repair retry when the model skips hunks.
    - [ ] Deduplicate concurrent jobs for the same cache key.
 4. [x] Passkey vault (`api/src/vault/`, `web/src/lib/vault/`): PRF → HKDF wraps a random vault key, passphrase (PBKDF2, 600k) fallback, several keys per vault, compare-and-swap writes. ChatGPT via the gateway handoff into the vault; per-job credentials; refresh relayed by the server (`POST /api/inference/chatgpt/refresh`) and serialised across tabs with Web Locks.
    - [ ] Decided: keep the relay until the milestone 1 CORS test. If `auth.openai.com` accepts browser requests, refresh straight from the browser and delete the relay; if not, keep the relay.

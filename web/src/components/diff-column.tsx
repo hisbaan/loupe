@@ -2,13 +2,12 @@ import type { DiffLineAnnotation, SelectedLineRange } from "@pierre/diffs"
 import type { ReactNode } from "react"
 import { FileDiffCard } from "@/components/file-diff-card"
 import { KIND_LABELS, sliceHunks, type CollapsedGroup, type FileSlice } from "@/lib/patch"
-import { fileAnchor } from "@/lib/utils"
 import type { AnalyzedFile, HunkAnalysis } from "@/lib/types"
 
 /** Cards shown together, optionally under a heading. */
-export type DiffGroup = { key: string; header?: ReactNode; slices: FileSlice[] }
+export type DiffGroup = { key: string; id?: string; header?: ReactNode; slices: FileSlice[] }
 
-type DiffColumnProps<T> = {
+export type DiffColumnProps<T> = {
   groups: DiffGroup[]
   /** What the pre-pass collapsed, shown folded at the bottom. */
   collapsed: CollapsedGroup[]
@@ -28,18 +27,13 @@ export function DiffColumn<T>({
   onAddComment,
   githubUrl,
 }: DiffColumnProps<T>) {
-  // A file can be split over several cards; its anchor goes on the first.
-  const anchored = new Set<string>()
   const card = (slice: FileSlice, folded: boolean) => {
     const { file } = slice
-    const first = !anchored.has(file.filename)
-    anchored.add(file.filename)
     return (
       <FileDiffCard
         key={sliceKey(slice)}
         slice={slice}
         collapsed={folded}
-        id={first ? fileAnchor(file.filename) : undefined}
         annotations={annotationsFor(file).filter((a) => onCard(slice, a))}
         renderAnnotation={renderAnnotation}
         onAddComment={onAddComment && ((range) => onAddComment(file, range))}
@@ -51,7 +45,7 @@ export function DiffColumn<T>({
   return (
     <div className="flex flex-col gap-8">
       {groups.map((group) => (
-        <div key={group.key} className="flex flex-col gap-4">
+        <div key={group.key} id={group.id} className="flex scroll-mt-4 flex-col gap-4">
           {group.header}
           {group.slices.map((slice) => card(slice, false))}
         </div>

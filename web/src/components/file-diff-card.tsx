@@ -9,7 +9,6 @@ type FileDiffCardProps<T> = {
   slice: FileSlice
   /** Starts folded to its header, for changes the pre-pass collapsed. */
   collapsed?: boolean
-  id?: string
   annotations?: DiffLineAnnotation<T>[]
   renderAnnotation?: (metadata: T) => ReactNode
   /** Shows a "+" in the gutter to comment on a line or dragged range. */
@@ -21,7 +20,6 @@ type FileDiffCardProps<T> = {
 export function FileDiffCard<T>({
   slice,
   collapsed = false,
-  id,
   annotations,
   renderAnnotation,
   onAddComment,
@@ -39,8 +37,10 @@ export function FileDiffCard<T>({
   const kind = file.analysis.kind ?? (collapsed ? hunks[0]?.kind : null)
 
   return (
+    // For scrollToFile and scrollToHunk.
     <section
-      id={id}
+      data-file={file.filename}
+      data-hunks={hunks.map((h) => h.id).join(" ")}
       className="scroll-mt-4 overflow-hidden rounded-md border border-neutral-200 dark:border-neutral-800"
     >
       {(collapsed || kind || notes.length > 0) && (

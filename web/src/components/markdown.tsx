@@ -6,6 +6,8 @@ type MarkdownProps = {
   children: string
   /** Where the text lives on GitHub; relative links resolve against it. */
   baseUrl: string
+  /** Off for model output: links and images show as their text, so an injected link can't be followed. */
+  links?: boolean
   className?: string
 }
 
@@ -13,18 +15,18 @@ type MarkdownProps = {
 const IMAGE_HOSTS = /(^|\.)(github\.com|githubusercontent\.com)$/
 
 /**
- * GitHub markdown written by other people (comments, reviews, descriptions).
- * Rendered as React elements, never as HTML: raw HTML in the source is
- * dropped, and links keep only http(s) and mailto.
+ * GitHub markdown written by other people (comments, reviews, descriptions),
+ * or by the model. Rendered as React elements, never as HTML: raw HTML in the
+ * source is dropped, and links keep only http(s) and mailto.
  */
-export function Markdown({ children, baseUrl, className }: MarkdownProps) {
+export function Markdown({ children, baseUrl, links = true, className }: MarkdownProps) {
   return (
     <div className={cn("markdown break-words", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         skipHtml
         urlTransform={(url) => safeUrl(url, baseUrl)}
-        components={components}
+        components={links ? components : textOnly}
       >
         {children}
       </ReactMarkdown>
@@ -63,6 +65,12 @@ const components: Components = {
       </div>
     )
   },
+}
+
+const textOnly: Components = {
+  ...components,
+  a: ({ children }) => <>{children}</>,
+  img: ({ alt }) => <>{alt}</>,
 }
 
 function Image({ src, alt }: { src: string; alt: string }) {

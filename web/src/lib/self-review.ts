@@ -1,9 +1,8 @@
 // Self-review helpers: decisions on findings, line snippets from the patch,
 // and the markdown export handed to a coding agent.
 
-import type { AnalyzedFile, Finding, LineSide, Pull, ReviewComment, SelfReviewNotes, SelfReviewRecord, Severity } from "@/lib/types"
-
-export const SEVERITY_ORDER: Severity[] = ["blocker", "major", "minor", "nit"]
+import { bySeverity } from "@/lib/reviews"
+import type { AnalyzedFile, Finding, LineSide, Pull, ReviewComment, SelfReviewNotes, SelfReviewRecord } from "@/lib/types"
 
 export type FindingStatus = "pending" | "accepted" | "dismissed"
 
@@ -109,7 +108,7 @@ type ExportInput = {
 export function exportItems(record: SelfReviewRecord, notes: SelfReviewNotes) {
   const findings = record.review.findings
     .filter((f) => findingStatus(notes, f.id) !== "dismissed")
-    .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity))
+    .sort(bySeverity)
   return { comments: notes.comments ?? [], findings }
 }
 
@@ -147,7 +146,7 @@ export function exportMarkdown({ owner, repo, pull, record, notes, files }: Expo
     parts.push(
       [
         `## ${++n}. ${f.title}`,
-        `- **Where:** ${where(f.path, f.side, f.start_line, f.end_line)}\n- **Severity:** ${f.severity}`,
+        `- **Where:** ${where(f.path, f.side, f.start_line, f.end_line)}\n- **Severity:** ${f.severity} (${f.category})`,
         code(f.path, f.side, f.start_line, f.end_line),
         findingBody(notes, f),
         f.suggestion && `**Suggested fix:**\n\n${f.suggestion}`,

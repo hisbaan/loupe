@@ -1,20 +1,23 @@
 import { FilesRead } from "@/components/files-read"
-import { MermaidDiagram } from "@/components/mermaid-diagram"
+import { Markdown } from "@/components/markdown"
 import { ProvenanceBadges } from "@/components/provenance-badges"
 import { coverage, shortSha } from "@/lib/reviews"
-import { diagramAnchor, timeAgo } from "@/lib/utils"
+import { timeAgo } from "@/lib/utils"
 import type { AnalyzedFile, ReviewRecord } from "@/lib/types"
 
 type ReviewSummaryProps = {
   record: ReviewRecord
   files: AnalyzedFile[]
+  /** The pull request on GitHub; links in model text are shown as text. */
+  baseUrl: string
 }
 
-export function ReviewSummary({ record, files }: ReviewSummaryProps) {
+/** The review's overview and questions, with who made it and how. */
+export function ReviewSummary({ record, files, baseUrl }: ReviewSummaryProps) {
   const { review } = record
   const { covered, total } = coverage(record, files)
   return (
-    <section className="mb-6 rounded-md border border-neutral-200 p-4 dark:border-neutral-800">
+    <section className="mb-8 rounded-md border border-neutral-200 p-4 dark:border-neutral-800">
       <p className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
         <span>
           Guided review by {record.model} ({record.effort}) · requested by @{record.requested_by.login}{" "}
@@ -29,10 +32,13 @@ export function ReviewSummary({ record, files }: ReviewSummaryProps) {
       {!record.current && (
         <p className="mt-2 text-sm text-amber-600">
           This review is of an earlier commit ({shortSha(record.head_sha)}). It covers {covered} of {total} changes;
-          changes made since have no notes.
+          the rest are under "Not in this review".
         </p>
       )}
-      <p className="mt-2">{review.summary}</p>
+      <h2 className="mt-3 text-sm font-medium">Overview</h2>
+      <Markdown baseUrl={baseUrl} links={false} className="mt-1">
+        {review.summary}
+      </Markdown>
       {review.questions.length > 0 && (
         <>
           <h2 className="mt-4 text-sm font-medium">Questions for the author</h2>
@@ -42,17 +48,6 @@ export function ReviewSummary({ record, files }: ReviewSummaryProps) {
             ))}
           </ul>
         </>
-      )}
-      {review.walkthrough.map(
-        (step, i) =>
-          step.diagram && (
-            <div key={i} id={diagramAnchor(i)} className="mt-4 scroll-mt-4">
-              <h2 className="mb-2 text-sm font-medium">
-                {i + 1}. {step.title}
-              </h2>
-              <MermaidDiagram source={step.diagram.source} caption={step.diagram.caption} title={step.title} />
-            </div>
-          ),
       )}
     </section>
   )

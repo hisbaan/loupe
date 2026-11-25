@@ -4,12 +4,22 @@ export function cn(...classes: (string | false | null | undefined)[]) {
   return classes.filter(Boolean).join(" ")
 }
 
-export function fileAnchor(filename: string) {
-  return `file:${filename}`
+export function sectionAnchor(index: number) {
+  return `section:${index}`
 }
 
-export function diagramAnchor(stepIndex: number) {
-  return `diagram:${stepIndex}`
+function scrollTo(element: Element | null) {
+  element?.scrollIntoView({ behavior: "smooth", block: "start" })
+}
+
+/** Scrolls to the first card showing the file (a file can be split over several). */
+export function scrollToFile(filename: string) {
+  scrollTo(document.querySelector(`[data-file="${CSS.escape(filename)}"]`))
+}
+
+/** Scrolls to the card showing a hunk. */
+export function scrollToHunk(hunkId: string) {
+  scrollTo(document.querySelector(`[data-hunks~="${CSS.escape(hunkId)}"]`))
 }
 
 export function timeAgo(unixSeconds: number) {

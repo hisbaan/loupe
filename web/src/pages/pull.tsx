@@ -8,7 +8,7 @@ import { StackNav } from "@/components/stack-nav"
 import { linkButtonClass } from "@/components/ui"
 import { api, type ApiResult } from "@/lib/api"
 import { useDiscussion } from "@/lib/discussion"
-import { cn, fileAnchor } from "@/lib/utils"
+import { cn, scrollToFile } from "@/lib/utils"
 import type { PullResponse } from "@/lib/types"
 
 type PullPageProps = {
@@ -83,7 +83,7 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
   function showFile(path: string) {
     setMode("guided")
     // After the diff renders.
-    window.setTimeout(() => document.getElementById(fileAnchor(path))?.scrollIntoView({ behavior: "smooth" }), 50)
+    window.setTimeout(() => scrollToFile(path), 50)
   }
 
   const tab = (value: Mode, label: string) => (

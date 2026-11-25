@@ -194,8 +194,8 @@ export type LineCommentRequest = {
   review: boolean
 }
 
-// Mirrors loupe_protocol::review.
-export type Importance = "critical" | "normal" | "low"
+// Mirrors loupe_protocol::review: guided reviews and self-reviews share it.
+export type Attention = "review_closely" | "read" | "skim"
 
 export type Diagram = {
   kind: string
@@ -203,24 +203,44 @@ export type Diagram = {
   caption: string | null
 }
 
-export type WalkthroughStep = {
+export type Section = {
   title: string
-  why: string
+  attention: Attention
+  /** Markdown, shown above the section's code. */
+  overview: string
+  /** In reading order; every reviewable hunk is in exactly one section. */
   hunk_ids: string[]
   diagram: Diagram | null
 }
 
-export type HunkAssessment = {
-  importance: Importance
-  rationale: string
-  concerns: string[]
+export type Severity = "blocker" | "major" | "minor" | "nit"
+export type Category = "bug" | "security" | "performance" | "design" | "convention" | "test" | "question" | "suspicious"
+export type LineSide = "new" | "old"
+
+/** A problem or question pinned to lines inside one hunk. */
+export type Finding = {
+  id: string
+  hunk_id: string
+  path: string
+  side: LineSide
+  start_line: number
+  end_line: number
+  severity: Severity
+  category: Category
+  title: string
+  /** Markdown. */
+  body: string
+  suggestion: string | null
 }
 
-export type GuidedReview = {
+export type Review = {
   schema_version: number
+  /** Markdown overview. */
   summary: string
-  walkthrough: WalkthroughStep[]
-  hunks: Record<string, HunkAssessment>
+  /** Most important first. */
+  sections: Section[]
+  findings: Finding[]
+  hunk_notes: Record<string, string>
   questions: string[]
 }
 
@@ -254,7 +274,7 @@ export type ReviewRecord = {
   /** The pull request's author requested this review of their own change. */
   requested_by_author: boolean
   updated_from: { login: string; head_sha: string } | null
-  review: GuidedReview
+  review: Review
 }
 
 // Mirrors api/src/trust.
@@ -271,28 +291,6 @@ export type JobProgress<R> =
   | { type: "error"; message: string }
 
 export type ReviewProgress = JobProgress<ReviewRecord>
-
-// Mirrors loupe_protocol::self_review.
-export type Severity = "blocker" | "major" | "minor" | "nit"
-export type LineSide = "new" | "old"
-
-export type Finding = {
-  id: string
-  path: string
-  side: LineSide
-  start_line: number
-  end_line: number
-  severity: Severity
-  title: string
-  body: string
-  suggestion: string | null
-}
-
-export type SelfReview = {
-  schema_version: number
-  summary: string
-  findings: Finding[]
-}
 
 /** Owned by the web client; the server stores it as opaque JSON. */
 export type SelfReviewNotes = {
@@ -321,7 +319,7 @@ export type SelfReviewRecord = {
   effort: Effort
   files_read: string[]
   current: boolean
-  review: SelfReview
+  review: Review
   notes: SelfReviewNotes
 }
 
