@@ -23,7 +23,7 @@ import {
   useDiffSettings,
   useSettings,
 } from "@/lib/settings"
-import { timeAgo } from "@/lib/utils"
+import { cn, timeAgo } from "@/lib/utils"
 import { currentLogin, passphraseProblem, useVault, vault, type VaultContents } from "@/lib/vault/store"
 import type { TrustedReviewer, VaultKeyRecord } from "@/lib/types"
 
@@ -184,16 +184,35 @@ function ReviewSection({ contents }: { contents: VaultContents | null }) {
             ))}
           </datalist>
         </label>
-        <SelectRow
-          label="Effort"
-          value={inference.effort}
-          choices={EFFORTS}
-          onChange={(effort) => updateInferenceSettings({ effort })}
-        />
+        <div className="flex items-center justify-between gap-3">
+          <span id="effort-label">Effort</span>
+          <div
+            role="radiogroup"
+            aria-labelledby="effort-label"
+            className="flex w-56 rounded-md border border-neutral-300 p-0.5 dark:border-neutral-700"
+          >
+            {EFFORTS.map((e) => (
+              <button
+                key={e.value}
+                type="button"
+                role="radio"
+                aria-checked={inference.effort === e.value}
+                onClick={() => updateInferenceSettings({ effort: e.value })}
+                className={cn(
+                  "flex-1 rounded px-2 py-1 text-xs",
+                  inference.effort === e.value
+                    ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
+                    : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900",
+                )}
+              >
+                {e.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <p className="text-neutral-500">
           {EFFORTS.find((e) => e.value === inference.effort)?.description} Every level reads the whole diff; effort sets
-          how hard the model thinks and how much of the rest of the repository it looks at for context. You can also
-          switch it beside a review.
+          how hard the model thinks and how much of the rest of the repository it looks at for context.
         </p>
         {contents == null && <p className="text-neutral-500">Unlock your vault below to load the list of models.</p>}
         {error && <p className="text-red-600">{error}</p>}

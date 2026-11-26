@@ -3,8 +3,7 @@ import { Link } from "@/components/link"
 import { buttonClass, errorMessage, linkButtonClass, secondaryButtonClass } from "@/components/ui"
 import { VaultGate } from "@/components/vault-gate"
 import { PROVIDER_LABELS, availableProviders, credentialFor, useInferencePreferences, type Provider } from "@/lib/inference"
-import { EFFORTS, updateInferenceSettings } from "@/lib/settings"
-import { cn } from "@/lib/utils"
+import { EFFORTS } from "@/lib/settings"
 import type { JobProgress, JobRequest } from "@/lib/types"
 import { useVault, type VaultContents } from "@/lib/vault/store"
 
@@ -20,7 +19,7 @@ type GenerateControlsProps = {
   actions: GenerateAction[]
 }
 
-/** Buttons for generation jobs, using the model chosen in settings, with an effort switch and progress. */
+/** Buttons for generation jobs, using the model and effort chosen in settings, with progress. */
 export function GenerateControls(props: GenerateControlsProps) {
   const state = useVault()
   if (state.status !== "unlocked") return <VaultGate />
@@ -86,7 +85,7 @@ function Controls({ actions, contents }: GenerateControlsProps & { contents: Vau
         {model ? (
           <>
             <span className="font-mono text-neutral-900 dark:text-neutral-100">{model}</span> via {PROVIDER_LABELS[provider]}
-            {" · "}
+            {` · ${EFFORTS.find((e) => e.value === effort)?.label ?? effort} effort · `}
           </>
         ) : (
           "No model chosen. "
@@ -95,28 +94,6 @@ function Controls({ actions, contents }: GenerateControlsProps & { contents: Vau
           {model ? "Change" : "Choose one in settings"}
         </Link>
       </p>
-      <div role="radiogroup" aria-label="Effort" className="flex rounded-md border border-neutral-300 p-0.5 dark:border-neutral-700">
-        {EFFORTS.map((e) => (
-          <button
-            key={e.value}
-            type="button"
-            role="radio"
-            aria-checked={effort === e.value}
-            title={e.description}
-            disabled={run.kind === "running"}
-            onClick={() => updateInferenceSettings({ effort: e.value })}
-            className={cn(
-              "flex-1 rounded px-2 py-1 text-xs",
-              effort === e.value
-                ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                : "text-neutral-600 hover:bg-neutral-100 dark:text-neutral-400 dark:hover:bg-neutral-900",
-            )}
-          >
-            {e.label}
-          </button>
-        ))}
-      </div>
-      <p className="text-xs text-neutral-500">{EFFORTS.find((e) => e.value === effort)?.description}</p>
       {actions.map((action) => (
         <button
           key={action.label}
