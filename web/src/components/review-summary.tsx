@@ -20,7 +20,7 @@ export function ReviewSummary({ record, files, baseUrl }: ReviewSummaryProps) {
     <section className="mb-8 rounded-md border border-neutral-200 p-4 dark:border-neutral-800">
       <p className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
         <span>
-          Guided review by {record.model} ({record.effort}) · requested by @{record.requested_by.login}{" "}
+          Review by {record.model} ({record.effort}) · requested by @{record.requested_by.login}{" "}
           {timeAgo(record.created_at)}
           {record.updated_from &&
             ` · updated from @${record.updated_from.login}'s review of ${shortSha(record.updated_from.head_sha)}`}

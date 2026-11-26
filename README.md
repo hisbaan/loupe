@@ -2,9 +2,9 @@
 
 AI-guided GitHub pull request review. Loupe surfaces what matters in a pull request and collapses what doesn't, then walks you through it.
 
-- **Guided review**: a summary, a reading order, importance and concerns on every hunk, and diagrams where the flow is hard to follow.
+- **Guided review**: a summary, a reading order, importance and concerns on every hunk, problems pinned to lines, and diagrams where the flow is hard to follow. The same review whether it's your pull request or someone else's.
 - **Review without leaving Loupe**: comment on lines, reply to and resolve threads, and approve or request changes. Stacked pull requests show the whole stack.
-- **Self-review**: problems found in your own draft, pinned to lines. Accept, edit or dismiss them, add your own comments, and export everything as markdown for an agent.
+- **Work with your coding agent**: every comment goes either to GitHub or into private notes for your agent (the choice sticks). Copy your notes, plus any unresolved GitHub threads, as markdown for the agent; after it pushes, see which notes' lines changed, then mark the draft ready for review.
 - **Bring your own model**: sign in with ChatGPT to use your plan, or use an OpenAI API key.
 
 ## How your data is handled

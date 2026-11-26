@@ -119,14 +119,24 @@ export type CommentAction = {
 
 type CommentBoxProps = {
   actions: CommentAction[]
+  /** Run by ⌘/Ctrl+Shift+Enter; ⌘/Ctrl+Enter runs the first action. */
+  shiftAction?: CommentAction
   placeholder?: string
+  initialBody?: string
   onCancel?: () => void
   autoFocus?: boolean
 }
 
 /** A textarea with one button per way to post it. */
-export function CommentBox({ actions, placeholder = "Leave a comment", onCancel, autoFocus = false }: CommentBoxProps) {
-  const [body, setBody] = useState("")
+export function CommentBox({
+  actions,
+  shiftAction,
+  placeholder = "Leave a comment",
+  initialBody = "",
+  onCancel,
+  autoFocus = false,
+}: CommentBoxProps) {
+  const [body, setBody] = useState(initialBody)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -144,7 +154,14 @@ export function CommentBox({ actions, placeholder = "Leave a comment", onCancel,
         autoFocus={autoFocus}
         value={body}
         onChange={(e) => setBody(e.target.value)}
-        rows={3}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey)) return
+          const action = e.shiftKey ? shiftAction : actions[0]
+          if (!action || busy || !body.trim()) return
+          e.preventDefault()
+          submit(action)
+        }}
+        rows={initialBody ? 6 : 3}
         placeholder={placeholder}
         className={cn(inputClass, "w-full")}
       />

@@ -1,113 +1,70 @@
-import { useState } from "react"
 import { Markdown } from "@/components/markdown"
 import { useSidebarNavigate } from "@/lib/sidebar"
 import { SeverityBadge } from "@/components/severity-badge"
-import { buttonClass, inputClass, linkButtonClass, noteClass as NOTE, secondaryButtonClass } from "@/components/ui"
+import { linkButtonClass, noteClass as NOTE } from "@/components/ui"
 import { CATEGORY_LABELS, bySeverity } from "@/lib/reviews"
-import type { FindingStatus } from "@/lib/self-review"
+import type { FindingStatus } from "@/lib/notes"
 import { cn, scrollToHunk } from "@/lib/utils"
 import type { Finding } from "@/lib/types"
 
-/** Your decision on a self-review finding. */
-export type FindingDecision = {
+/** What you can do with a finding. */
+export type FindingActions = {
   status: FindingStatus
-  /** The body, as you edited it if you did. */
-  body: string
-  onDecide: (decision: { status: "accepted" | "dismissed"; body?: string } | null) => void
+  /** Starts a comment from the finding, to edit and send to GitHub or your agent. */
+  onAccept: () => void
+  onDismiss: () => void
+  /** Undoes a dismissal. */
+  onRestore: () => void
 }
 
 type FindingNoteProps = {
   finding: Finding
   /** Where relative links in the text would resolve; links are shown as text. */
   baseUrl: string
-  /** Self-reviews only: accept, edit or dismiss. */
-  decision?: FindingDecision
+  actions?: FindingActions
 }
 
 /** A finding in the diff, under the lines it's about. */
-export function FindingNote({ finding, baseUrl, decision }: FindingNoteProps) {
-  const [editing, setEditing] = useState(false)
-  const body = decision?.body ?? finding.body
-  const [draft, setDraft] = useState(body)
-  const status = decision?.status ?? "pending"
-  const edited = body !== finding.body
-
+export function FindingNote({ finding, baseUrl, actions }: FindingNoteProps) {
+  const dismissed = actions?.status === "dismissed"
   return (
-    <div className={cn(NOTE, status === "dismissed" && "opacity-50")}>
+    <div className={cn(NOTE, dismissed && "opacity-50")}>
       <div className="flex items-start gap-2">
         <SeverityBadge severity={finding.severity} />
         <span className="flex-1 font-medium">{finding.title}</span>
         <span className="text-xs text-neutral-500">{CATEGORY_LABELS[finding.category]}</span>
-        {status !== "pending" && <span className="text-xs text-neutral-500">· {status}</span>}
+        {dismissed && <span className="text-xs text-neutral-500">· dismissed</span>}
       </div>
-      {editing && decision ? (
-        <div className="mt-2 flex flex-col gap-2">
-          <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={4} className={inputClass} />
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                decision.onDecide({ status: "accepted", body: draft.trim() === finding.body ? undefined : draft.trim() })
-                setEditing(false)
-              }}
-              className={buttonClass}
-            >
-              Save and accept
+      <Markdown baseUrl={baseUrl} links={false} className="mt-1">
+        {finding.body}
+      </Markdown>
+      {finding.suggestion && (
+        <pre className="mt-2 overflow-x-auto rounded bg-neutral-100 p-2 text-xs whitespace-pre-wrap dark:bg-neutral-900">
+          {finding.suggestion}
+        </pre>
+      )}
+      {actions && (
+        <div className="mt-2 flex gap-3 text-xs">
+          {dismissed ? (
+            <button type="button" onClick={actions.onRestore} className={linkButtonClass}>
+              Restore
             </button>
-            <button type="button" onClick={() => setEditing(false)} className={secondaryButtonClass}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <Markdown baseUrl={baseUrl} links={false} className="mt-1">
-            {body}
-          </Markdown>
-          {edited && <p className="mt-1 text-xs text-neutral-500">Edited by you</p>}
-          {finding.suggestion && (
-            <pre className="mt-2 overflow-x-auto rounded bg-neutral-100 p-2 text-xs whitespace-pre-wrap dark:bg-neutral-900">
-              {finding.suggestion}
-            </pre>
-          )}
-          {decision && (
-            <div className="mt-2 flex gap-3 text-xs">
-              {status !== "accepted" && (
-                <button
-                  type="button"
-                  onClick={() => decision.onDecide({ status: "accepted", body: edited ? body : undefined })}
-                  className={linkButtonClass}
-                >
-                  Accept
-                </button>
-              )}
+          ) : (
+            <>
               <button
                 type="button"
-                onClick={() => {
-                  setDraft(body)
-                  setEditing(true)
-                }}
+                onClick={actions.onAccept}
+                title="Start a comment from this finding, for GitHub or your agent"
                 className={linkButtonClass}
               >
-                Edit
+                Accept
               </button>
-              {status !== "dismissed" && (
-                <button
-                  type="button"
-                  onClick={() => decision.onDecide({ status: "dismissed", body: edited ? body : undefined })}
-                  className={linkButtonClass}
-                >
-                  Dismiss
-                </button>
-              )}
-              {status !== "pending" && (
-                <button type="button" onClick={() => decision.onDecide(null)} className={linkButtonClass}>
-                  Undo
-                </button>
-              )}
-            </div>
+              <button type="button" onClick={actions.onDismiss} className={linkButtonClass}>
+                Dismiss
+              </button>
+            </>
           )}
-        </>
+        </div>
       )}
     </div>
   )
@@ -115,7 +72,7 @@ export function FindingNote({ finding, baseUrl, decision }: FindingNoteProps) {
 
 type FindingListProps = {
   findings: Finding[]
-  /** Self-reviews: your decision on each. */
+  /** What you did with each. */
   statusOf?: (finding: Finding) => FindingStatus
   /** Shown when there are no findings. */
   empty: string
@@ -146,7 +103,8 @@ export function FindingList({ findings, statusOf, empty }: FindingListProps) {
             <span className="flex items-center gap-2">
               <SeverityBadge severity={f.severity} />
               <span className="text-xs text-neutral-500">{CATEGORY_LABELS[f.category]}</span>
-              {status === "accepted" && <span className="text-xs text-green-700 dark:text-green-400">accepted</span>}
+              {status === "agent" && <span className="text-xs text-violet-700 dark:text-violet-300">in your agent notes</span>}
+              {status === "github" && <span className="text-xs text-green-700 dark:text-green-400">on GitHub</span>}
               {status === "dismissed" && <span className="text-xs text-neutral-500">dismissed</span>}
             </span>
             <span className={cn(status === "dismissed" && "line-through")}>{f.title}</span>

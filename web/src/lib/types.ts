@@ -196,7 +196,7 @@ export type LineCommentRequest = {
   review: boolean
 }
 
-// Mirrors loupe_protocol::review: guided reviews and self-reviews share it.
+// Mirrors loupe_protocol::review.
 export type Attention = "review_closely" | "read" | "skim"
 
 export type Diagram = {
@@ -294,35 +294,41 @@ export type JobProgress<R> =
 
 export type ReviewProgress = JobProgress<ReviewRecord>
 
-/** Owned by the web client; the server stores it as opaque JSON. */
-export type SelfReviewNotes = {
-  /** Absent means undecided. Dismissed findings are left out of exports. */
-  findings?: Record<string, { status: "accepted" | "dismissed"; body?: string }>
-  comments?: ReviewComment[]
-}
-
-/** The user's own comment on a line range. */
-export type ReviewComment = {
-  id: string
+// Mirrors api/src/notes: private notes for your coding agent.
+export type AgentNote = {
+  id: number
   path: string
   side: LineSide
   start_line: number
   end_line: number
+  /** The commit the lines refer to. */
+  head_sha: string
+  /** The hunk the lines were in; while it's still in the diff, so are they. */
+  hunk_id: string | null
+  /** The lines as the diff showed them. */
+  snippet: string | null
   body: string
+  /** The review finding it was accepted from. */
+  finding_key: string | null
+  resolved: boolean
+  /** The head commit when it was last handed to your agent. */
+  handed_off_sha: string | null
+  handed_off_at: number | null
+  created_at: number
+  updated_at: number
 }
 
-// Mirrors api/src/reviews/self_review.
-export type SelfReviewRecord = {
-  id: number
-  model: string
-  base_sha: string
-  head_sha: string
-  created_at: number
-  effort: Effort
-  files_read: string[]
-  current: boolean
-  review: Review
-  notes: SelfReviewNotes
+export type NewAgentNote = Pick<
+  AgentNote,
+  "path" | "side" | "start_line" | "end_line" | "head_sha" | "hunk_id" | "snippet" | "body" | "finding_key"
+>
+
+export type FindingDecision = "dismissed" | "github"
+
+export type AgentNoteList = {
+  /** Oldest first. */
+  notes: AgentNote[]
+  decisions: { finding_key: string; decision: FindingDecision }[]
 }
 
 // Mirrors api/src/inference::Credential: sent with each job, never stored.

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CommentBox, CommentView, type CommentAction } from "@/components/discussion-comment"
+import { CommentBox, CommentView } from "@/components/discussion-comment"
 import { ghostButtonClass, inputClass, linkButtonClass, smallButtonClass } from "@/components/ui"
 import { api } from "@/lib/api"
 import type { DiscussionState } from "@/lib/discussion"
@@ -111,32 +111,4 @@ export type DraftLineComment = {
   side: LineSide
   start_line: number
   end_line: number
-}
-
-type LineCommentFormProps = {
-  draft: DraftLineComment
-  /** Your review in progress: new comments join it instead of posting alone. */
-  pendingReview: boolean
-  post: (body: string, review: boolean) => Promise<string | null>
-  onCancel: () => void
-}
-
-/** A new comment on a line range, posted now or added to your review, as on GitHub. */
-export function LineCommentForm({ draft, pendingReview, post, onCancel }: LineCommentFormProps) {
-  const lines = draft.start_line === draft.end_line ? `line ${draft.end_line}` : `lines ${draft.start_line}-${draft.end_line}`
-  const actions: CommentAction[] = pendingReview
-    ? [{ label: "Add review comment", run: (body) => post(body, true) }]
-    : [
-        { label: "Start a review", run: (body) => post(body, true) },
-        { label: "Add single comment", secondary: true, run: (body) => post(body, false) },
-      ]
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs text-neutral-500">
-        Comment on {lines}
-        {draft.side === "old" && " (old version)"}
-      </span>
-      <CommentBox autoFocus actions={actions} onCancel={onCancel} />
-    </div>
-  )
 }

@@ -1,18 +1,20 @@
 import type {
+  AgentNote,
+  AgentNoteList,
   ChatGptTokens,
   ClientConfig,
   Credential,
   Discussion,
+  FindingDecision,
   JobProgress,
   JobRequest,
   LineCommentRequest,
   Me,
+  NewAgentNote,
   NewVaultKey,
   PullResponse,
   PullListResponse,
   ReviewRecord,
-  SelfReviewNotes,
-  SelfReviewRecord,
   Stack,
   ReviewEvent,
   TrustedReviewer,
@@ -103,6 +105,9 @@ export const api = {
     request<void>(`${pullPath(owner, repo, number)}/review`, postJson(body)),
   discardReview: (owner: string, repo: string, number: number) =>
     request<void>(`${pullPath(owner, repo, number)}/review`, { method: "DELETE" }),
+  /** Takes a draft out of draft; 409 means new commits were pushed. */
+  markReady: (owner: string, repo: string, number: number, headSha: string) =>
+    request<void>(`${pullPath(owner, repo, number)}/ready`, postJson({ head_sha: headSha })),
   reply: (threadId: string, body: string) =>
     request<void>(`/discussion/threads/${encodeURIComponent(threadId)}/replies`, postJson({ body })),
   setResolved: (threadId: string, resolved: boolean) =>
@@ -133,7 +138,7 @@ export const api = {
   addVaultKey: (key: NewVaultKey) => request<VaultKeyRecord>("/vault/keys", postJson(key)),
   removeVaultKey: (id: number) => request<void>(`/vault/keys/${id}`, { method: "DELETE" }),
 
-  /** Starts a guided review and reports progress until it finishes or fails. */
+  /** Starts a review and reports progress until it finishes or fails. */
   generateReview: (
     owner: string,
     repo: string,
@@ -142,17 +147,19 @@ export const api = {
     onProgress: (progress: JobProgress<ReviewRecord>) => void,
   ) => runJob(`${pullPath(owner, repo, number)}/reviews`, body, onProgress),
 
-  selfReviews: (owner: string, repo: string, number: number) =>
-    request<{ self_reviews: SelfReviewRecord[] }>(`${pullPath(owner, repo, number)}/self-reviews`),
-  generateSelfReview: (
-    owner: string,
-    repo: string,
-    number: number,
-    body: JobRequest,
-    onProgress: (progress: JobProgress<SelfReviewRecord>) => void,
-  ) => runJob(`${pullPath(owner, repo, number)}/self-reviews`, body, onProgress),
-  saveSelfReviewNotes: (id: number, notes: SelfReviewNotes) =>
-    request<void>(`/self-reviews/${id}/notes`, sendJson("PUT", { notes })),
+  /** Your agent notes on a pull request, and what you decided about its findings. */
+  notes: (owner: string, repo: string, number: number) =>
+    request<AgentNoteList>(`${pullPath(owner, repo, number)}/notes`),
+  addNote: (owner: string, repo: string, number: number, note: NewAgentNote) =>
+    request<AgentNote>(`${pullPath(owner, repo, number)}/notes`, postJson(note)),
+  updateNote: (id: number, change: { body?: string; resolved?: boolean }) =>
+    request<AgentNote>(`/notes/${id}`, sendJson("PATCH", change)),
+  deleteNote: (id: number) => request<void>(`/notes/${id}`, { method: "DELETE" }),
+  /** Marks your open notes as handed to your agent at this commit. */
+  handOffNotes: (owner: string, repo: string, number: number, headSha: string) =>
+    request<void>(`${pullPath(owner, repo, number)}/notes/hand-off`, postJson({ head_sha: headSha })),
+  decideFinding: (owner: string, repo: string, number: number, findingKey: string, decision: FindingDecision | null) =>
+    request<void>(`${pullPath(owner, repo, number)}/finding-decisions`, sendJson("PUT", { finding_key: findingKey, decision })),
 }
 
 /** Starts a generation job and reports its progress until it finishes or fails. */

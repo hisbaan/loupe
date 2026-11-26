@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from "react"
 import { Conversation } from "@/components/conversation"
-import { GuidedReview } from "@/components/guided-review"
 import { Layout } from "@/components/layout"
+import { PullReview } from "@/components/pull-review"
 import { ReviewPanel } from "@/components/review-panel"
-import { SelfReview } from "@/components/self-review"
 import { StackNav } from "@/components/stack-nav"
-import { linkButtonClass } from "@/components/ui"
+import { linkButtonClass, secondaryButtonClass } from "@/components/ui"
 import { api, type ApiResult } from "@/lib/api"
 import { useDiscussion } from "@/lib/discussion"
 import { cn, scrollAndHold } from "@/lib/utils"
@@ -17,13 +16,14 @@ type PullPageProps = {
   number: number
 }
 
-type Mode = "guided" | "self" | "conversation"
+type Mode = "review" | "conversation"
 
 export function PullPage({ owner, repo, number }: PullPageProps) {
   const [result, setResult] = useState<ApiResult<PullResponse> | null>(null)
-  // null: follow the default for the pull request (self-review for drafts).
-  const [chosenMode, setMode] = useState<Mode | null>(null)
+  const [mode, setMode] = useState<Mode>("review")
   const [installUrl, setInstallUrl] = useState<string | null>(null)
+  const [markingReady, setMarkingReady] = useState(false)
+  const [readyError, setReadyError] = useState<string | null>(null)
   const discussion = useDiscussion(owner, repo, number)
 
   const load = useCallback(() => api.pull(owner, repo, number), [owner, repo, number])
@@ -67,7 +67,6 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
   }
 
   const { pull, files, truncated } = result.data
-  const mode = chosenMode ?? (pull.draft ? "self" : "guided")
   const collapsedFiles = files.filter((f) => f.analysis.collapsible).length
   const loaded = discussion.discussion
   // Pushed to since this page loaded: comments would land on lines that moved.
@@ -80,8 +79,17 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
     await discussion.reload()
   }
 
+  async function markReady() {
+    if (!window.confirm("Mark this pull request ready for review? Reviewers will be notified.")) return
+    setMarkingReady(true)
+    const failed = await discussion.write(() => api.markReady(owner, repo, number, pull.head.sha))
+    setMarkingReady(false)
+    setReadyError(failed)
+    if (failed == null) setResult(await load())
+  }
+
   function showThread(thread: ReviewThread) {
-    setMode("guided")
+    setMode("review")
     // The thread once the diff renders it, its file until then (or for good if
     // it's outdated), held in place while the review loads above it.
     scrollAndHold(
@@ -127,6 +135,17 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
             >
               Open on GitHub ↗
             </a>
+            {pull.draft && pull.state === "open" && loaded?.viewer_did_author && (
+              <button
+                type="button"
+                disabled={stale || markingReady}
+                onClick={markReady}
+                title="Take this pull request out of draft so it can be reviewed and merged"
+                className={secondaryButtonClass}
+              >
+                Ready for review
+              </button>
+            )}
             <ReviewPanel owner={owner} repo={repo} pull={pull} state={discussion} />
           </div>
         </div>
@@ -143,22 +162,21 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
             </button>
           </p>
         )}
+        {readyError && <p className="mt-2 text-sm text-red-600">Couldn't mark it ready for review: {readyError}</p>}
         {discussion.error && !loaded && (
           <p className="mt-2 text-sm text-red-600">Couldn't load comments from GitHub: {discussion.error}</p>
         )}
         <StackNav owner={owner} repo={repo} number={number} />
         <div className="mt-4 flex gap-6 border-b border-neutral-200 dark:border-neutral-800">
-          {tab("guided", "Guided review")}
-          {tab("self", "Self-review")}
+          {tab("review", "Review")}
           {tab("conversation", conversationCount ? `Conversation (${conversationCount})` : "Conversation")}
         </div>
       </div>
 
       {/* Keyed by head commit so loading new commits refetches which reviews are current. */}
-      {mode === "guided" && (
-        <GuidedReview key={pull.head.sha} owner={owner} repo={repo} number={number} pr={result.data} discussion={discussion} />
+      {mode === "review" && (
+        <PullReview key={pull.head.sha} owner={owner} repo={repo} number={number} pr={result.data} discussion={discussion} />
       )}
-      {mode === "self" && <SelfReview key={pull.head.sha} owner={owner} repo={repo} number={number} pr={result.data} />}
       {mode === "conversation" && (
         <Conversation owner={owner} repo={repo} pull={pull} state={discussion} onShowThread={showThread} />
       )}

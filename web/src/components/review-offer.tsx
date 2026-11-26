@@ -11,7 +11,7 @@ type ReviewOfferProps = {
   onDismiss: () => void
 }
 
-/** "@alice already generated a guided review. Use it?" */
+/** "@alice already generated a review. Use it?" */
 export function ReviewOffer({ record, files, onUse, onDismiss }: ReviewOfferProps) {
   const who = record.trust === "mine" ? "You" : `@${record.requested_by.login}`
   const { covered, total } = coverage(record, files)
@@ -20,7 +20,7 @@ export function ReviewOffer({ record, files, onUse, onDismiss }: ReviewOfferProp
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-2">
           <span>
-            {who} generated a guided review {timeAgo(record.created_at)} with {record.model}
+            {who} generated a review {timeAgo(record.created_at)} with {record.model}
             {record.current ? "." : ` for an earlier commit (${shortSha(record.head_sha)}).`}
           </span>
           <ProvenanceBadges record={record} />

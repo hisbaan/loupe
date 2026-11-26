@@ -7,7 +7,7 @@ import { EFFORTS } from "@/lib/settings"
 import type { JobProgress, JobRequest } from "@/lib/types"
 import { useVault, type VaultContents } from "@/lib/vault/store"
 
-/** One button that starts a generation job (a review, an update, a self-review). */
+/** One button that starts a generation job (a review, or an update of one). */
 export type GenerateAction = {
   label: string
   title?: string
