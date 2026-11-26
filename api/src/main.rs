@@ -5,6 +5,7 @@ mod discussion;
 mod error;
 mod github;
 mod inference;
+mod notes;
 mod prepass;
 mod pulls;
 mod reviews;
@@ -57,6 +58,7 @@ async fn main() -> anyhow::Result<()> {
         .merge(pulls::routes())
         .merge(discussion::routes())
         .merge(reviews::routes())
+        .merge(notes::routes())
         .merge(inference::routes())
         .merge(vault::routes())
         .merge(trust::routes())

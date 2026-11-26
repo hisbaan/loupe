@@ -110,11 +110,8 @@ pub async fn fetch_pull(
     repo: &str,
     number: u64,
 ) -> AppResult<PullResponse> {
-    if !is_github_name(owner) || !is_github_name(repo) {
-        return Err(AppError::BadRequest("invalid owner or repo".into()));
-    }
+    let pull = fetch_pull_only(state, token, owner, repo, number).await?;
     let base = format!("/repos/{owner}/{repo}/pulls/{number}");
-    let pull: Pull = get_json(state, token, &base).await?;
 
     let mut files = Vec::new();
     let mut truncated = true;
@@ -141,6 +138,15 @@ pub async fn fetch_pull(
         .collect();
 
     Ok(PullResponse { pull, files, truncated })
+}
+
+/// Fetches just the pull request, without its files. Like [`fetch_pull`], a
+/// successful fetch with the user's token is the access check.
+pub async fn fetch_pull_only(state: &AppState, token: &str, owner: &str, repo: &str, number: u64) -> AppResult<Pull> {
+    if !is_github_name(owner) || !is_github_name(repo) {
+        return Err(AppError::BadRequest("invalid owner or repo".into()));
+    }
+    get_json(state, token, &format!("/repos/{owner}/{repo}/pulls/{number}")).await
 }
 
 async fn get_pull(
