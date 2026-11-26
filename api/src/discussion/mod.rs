@@ -125,10 +125,23 @@ struct PendingNode {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct ViewerReviewNode {
+    state: String,
+    commit: Option<Oid>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Oid {
+    oid: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct PullNode {
     head_ref_oid: String,
     viewer_did_author: bool,
     review_decision: Option<String>,
+    viewer_latest_review: Option<ViewerReviewNode>,
     locked: bool,
     comments: Connection<Comment>,
     reviews: Connection<Review>,
@@ -153,6 +166,15 @@ struct PendingReview {
     comments: usize,
 }
 
+/// The viewer's latest submitted review, so the page can show they've reviewed.
+#[derive(Debug, Serialize)]
+struct ViewerReview {
+    /// `APPROVED`, `CHANGES_REQUESTED`, `COMMENTED` or `DISMISSED`.
+    state: String,
+    /// The commit it was submitted on.
+    commit_sha: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 struct Discussion {
     head_sha: String,
@@ -163,6 +185,7 @@ struct Discussion {
     locked: bool,
     /// The viewer's unsubmitted review, if they started one here or on GitHub.
     pending_review: Option<PendingReview>,
+    viewer_review: Option<ViewerReview>,
     /// The conversation, oldest first.
     comments: Vec<Comment>,
     /// Submitted reviews, oldest first.
@@ -179,6 +202,7 @@ query($owner: String!, $name: String!, $number: Int!) {
       headRefOid
       viewerDidAuthor
       reviewDecision
+      viewerLatestReview { state commit { oid } }
       locked
       comments(last: 100) { totalCount nodes { ...issueComment } }
       reviews(last: 100, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) {
@@ -233,6 +257,13 @@ async fn get_discussion(
             id: r.id,
             comments: r.comments.map_or(0, |c| c.total_count),
         });
+    let viewer_review = pull
+        .viewer_latest_review
+        .filter(|r| r.state != "PENDING")
+        .map(|r| ViewerReview {
+            state: r.state,
+            commit_sha: r.commit.map(|c| c.oid),
+        });
 
     Ok(Json(Discussion {
         head_sha: pull.head_ref_oid,
@@ -240,6 +271,7 @@ async fn get_discussion(
         review_decision: pull.review_decision,
         locked: pull.locked,
         pending_review,
+        viewer_review,
         comments: pull.comments.nodes,
         reviews: pull.reviews.nodes,
         threads: pull.review_threads.nodes,
@@ -664,6 +696,7 @@ mod tests {
             "headRefOid": "abc",
             "viewerDidAuthor": false,
             "reviewDecision": null,
+            "viewerLatestReview": { "state": "APPROVED", "commit": { "oid": "abc" } },
             "locked": false,
             "comments": { "totalCount": 1, "nodes": [{
                 "id": "IC_1", "body": "hi", "createdAt": "2026-01-01T00:00:00Z", "url": "https://github.com/x",
