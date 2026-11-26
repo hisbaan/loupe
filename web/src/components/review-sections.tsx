@@ -2,6 +2,7 @@ import { AttentionBadge } from "@/components/attention-badge"
 import { DiffColumn, type DiffColumnProps, type DiffGroup } from "@/components/diff-column"
 import { Markdown } from "@/components/markdown"
 import { MermaidDiagram } from "@/components/mermaid-diagram"
+import { useSidebarNavigate } from "@/lib/sidebar"
 import type { ReviewLayout, SectionLayout } from "@/lib/review-layout"
 import { sectionAnchor } from "@/lib/utils"
 import type { Review } from "@/lib/types"
@@ -91,7 +92,11 @@ function groups(review: Review | null, layout: ReviewLayout, baseUrl: string): D
 
 /** The sidebar's table of contents: each section with how closely to read it. */
 export function ReviewContents({ review, layout }: { review: Review; layout: ReviewLayout }) {
-  const go = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+  const navigate = useSidebarNavigate()
+  const go = (id: string) => {
+    navigate()
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
   return (
     <nav className="flex flex-col gap-1">
       <h2 className="text-xs font-medium tracking-wide text-neutral-500 uppercase">Sections</h2>

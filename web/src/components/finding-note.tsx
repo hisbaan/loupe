@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Markdown } from "@/components/markdown"
+import { useSidebarNavigate } from "@/lib/sidebar"
 import { SeverityBadge } from "@/components/severity-badge"
 import { buttonClass, inputClass, linkButtonClass, noteClass as NOTE, secondaryButtonClass } from "@/components/ui"
 import { CATEGORY_LABELS, bySeverity } from "@/lib/reviews"
@@ -122,6 +123,7 @@ type FindingListProps = {
 
 /** Every finding, most severe first; choosing one scrolls to it. */
 export function FindingList({ findings, statusOf, empty }: FindingListProps) {
+  const navigate = useSidebarNavigate()
   if (findings.length === 0) return <p className="text-sm text-neutral-500">{empty}</p>
   return (
     <div className="flex flex-col gap-1">
@@ -132,7 +134,10 @@ export function FindingList({ findings, statusOf, empty }: FindingListProps) {
           <button
             key={f.id}
             type="button"
-            onClick={() => scrollToHunk(f.hunk_id)}
+            onClick={() => {
+              navigate()
+              scrollToHunk(f.hunk_id)
+            }}
             className={cn(
               "flex flex-col gap-1 rounded-md p-2 text-left text-sm hover:bg-neutral-100 dark:hover:bg-neutral-900",
               status === "dismissed" && "opacity-50",
