@@ -139,7 +139,13 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
   const layout = reviewLayout(record?.review ?? null, files)
   const hasMine = reviews.some((r) => r.current && r.trust === "mine")
   const updateFrom = updatableReview(reviews)
-  const actions: GenerateAction[] = [{ label: hasMine ? "Regenerate review" : "Generate guided review", run: generate() }]
+  // Your review of the latest commit is still good; generating again only makes
+  // sense once new commits make it stale.
+  const actions: GenerateAction[] = []
+  if (!hasMine) {
+    const stale = reviews.some((r) => r.trust === "mine")
+    actions.push({ label: stale ? "Regenerate review" : "Generate guided review", run: generate() })
+  }
   if (updateFrom) {
     actions.push({
       label: `Update ${updateFrom.trust === "mine" ? "your" : `@${updateFrom.requested_by.login}'s`} review of ${shortSha(updateFrom.head_sha)}`,
@@ -153,7 +159,7 @@ export function GuidedReview({ owner, repo, number, pr, discussion }: GuidedRevi
     <ReviewColumns
       aside={
         <>
-          <GenerateControls actions={actions} />
+          {actions.length > 0 && <GenerateControls actions={actions} />}
           {record && <ReviewContents review={record.review} layout={layout} />}
           {record && <FindingList findings={findings} empty="No findings." />}
           {reviews.length > 1 && (
