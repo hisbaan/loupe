@@ -171,6 +171,8 @@ export type Discussion = {
   locked: boolean
   /** Your unsubmitted review, started here or on GitHub. */
   pending_review: { id: string; comments: number } | null
+  /** Your latest submitted review. */
+  viewer_review: { state: SubmittedReview["state"]; commit_sha: string | null } | null
   /** The conversation, oldest first. */
   comments: DiscussionComment[]
   /** Submitted reviews, oldest first. */

@@ -12,6 +12,12 @@ type ReviewPanelProps = {
   state: DiscussionState
 }
 
+/** Decisions already given, by the review state GitHub records for them. */
+const DECIDED: Partial<Record<string, { event: ReviewEvent; button: string; done: string }>> = {
+  APPROVED: { event: "approve", button: "✓ Approved", done: "You approved this commit." },
+  CHANGES_REQUESTED: { event: "request_changes", button: "Changes requested", done: "You requested changes on this commit." },
+}
+
 const EVENTS: { value: ReviewEvent; label: string; description: string }[] = [
   { value: "comment", label: "Comment", description: "General feedback without approving." },
   { value: "approve", label: "Approve", description: "These changes can be merged." },
@@ -26,7 +32,7 @@ const EVENTS: { value: ReviewEvent; label: string; description: string }[] = [
 export function ReviewPanel({ owner, repo, pull, state }: ReviewPanelProps) {
   const { discussion, write } = state
   const [open, setOpen] = useState(false)
-  const [event, setEvent] = useState<ReviewEvent>("comment")
+  const [chosenEvent, setEvent] = useState<ReviewEvent>("comment")
   const [body, setBody] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -53,6 +59,11 @@ export function ReviewPanel({ owner, repo, pull, state }: ReviewPanelProps) {
   const pending = discussion.pending_review
   // GitHub doesn't let authors approve or request changes on their own pull request.
   const ownPull = discussion.viewer_did_author
+  // Your approval or change request on the commit on screen: giving it again would only duplicate it.
+  const mine = discussion.viewer_review
+  const decided = mine && mine.commit_sha === pull.head.sha ? DECIDED[mine.state] : undefined
+  // It may have been given (here or on GitHub) after you picked it.
+  const event = chosenEvent === decided?.event ? "comment" : chosenEvent
   const needsBody = event !== "approve" && !pending?.comments
 
   async function submit() {
@@ -76,8 +87,16 @@ export function ReviewPanel({ owner, repo, pull, state }: ReviewPanelProps) {
 
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} className={pending ? buttonClass : secondaryButtonClass}>
-        Review{pending ? ` · ${pending.comments} pending` : ""}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          pending ? buttonClass : secondaryButtonClass,
+          !pending && decided?.event === "approve" && "text-green-700 dark:text-green-400",
+          !pending && decided?.event === "request_changes" && "text-red-700 dark:text-red-400",
+        )}
+      >
+        {pending ? `Review · ${pending.comments} pending` : (decided?.button ?? "Review")}
       </button>
       {open && (
         <div className="absolute top-full right-0 z-20 mt-2 flex w-96 flex-col gap-3 rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-lg dark:border-neutral-800 dark:bg-neutral-950">
@@ -91,7 +110,8 @@ export function ReviewPanel({ owner, repo, pull, state }: ReviewPanelProps) {
           />
           <div className="flex flex-col gap-2">
             {EVENTS.map((option) => {
-              const disabled = ownPull && option.value !== "comment"
+              const alreadyGiven = option.value === decided?.event
+              const disabled = (ownPull && option.value !== "comment") || alreadyGiven
               return (
                 <label key={option.value} className={cn("flex items-start gap-2", disabled && "opacity-50")}>
                   <input
@@ -105,7 +125,11 @@ export function ReviewPanel({ owner, repo, pull, state }: ReviewPanelProps) {
                   <span>
                     <span className="font-medium">{option.label}</span>
                     <span className="block text-xs text-neutral-500">
-                      {disabled ? "Not on your own pull request." : option.description}
+                      {alreadyGiven
+                        ? decided?.done
+                        : disabled
+                          ? "Not on your own pull request."
+                          : option.description}
                     </span>
                   </span>
                 </label>
