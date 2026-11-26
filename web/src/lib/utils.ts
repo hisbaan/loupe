@@ -12,14 +12,52 @@ function scrollTo(element: Element | null) {
   element?.scrollIntoView({ behavior: "smooth", block: "start" })
 }
 
-/** Scrolls to the first card showing the file (a file can be split over several). */
-export function scrollToFile(filename: string) {
-  scrollTo(document.querySelector(`[data-file="${CSS.escape(filename)}"]`))
-}
-
 /** Scrolls to the card showing a hunk. */
 export function scrollToHunk(hunkId: string) {
   scrollTo(document.querySelector(`[data-hunks~="${CSS.escape(hunkId)}"]`))
+}
+
+/** How long the target has to stay put before scrollAndHold lets go. */
+const HOLD_STILL_MS = 3000
+/** Gives up regardless, in case something keeps moving. */
+const HOLD_MAX_MS = 15000
+const USER_SCROLL_EVENTS = ["wheel", "touchstart", "keydown", "pointerdown"] as const
+let releaseHold: (() => void) | null = null
+
+/**
+ * Scrolls to what `find` returns and keeps it in place while the page around
+ * it is still loading (a review arriving shifts everything below its summary),
+ * until it has stayed put for a while or you scroll yourself. `find` is asked
+ * again every frame, so it can return something better once that renders.
+ */
+export function scrollAndHold(find: () => Element | null) {
+  releaseHold?.()
+  const started = performance.now()
+  let still = started
+  let target: Element | null = null
+  let top = 0
+  let frame = 0
+
+  const release = () => {
+    cancelAnimationFrame(frame)
+    for (const event of USER_SCROLL_EVENTS) window.removeEventListener(event, release, true)
+    if (releaseHold === release) releaseHold = null
+  }
+  const tick = (now: number) => {
+    const found = find()
+    if (found && (found !== target || Math.abs(found.getBoundingClientRect().top - top) > 1)) {
+      found.scrollIntoView({ block: "start" })
+      target = found
+      top = found.getBoundingClientRect().top
+      still = now
+    }
+    if (now - started > HOLD_MAX_MS || (target && now - still > HOLD_STILL_MS)) release()
+    else frame = requestAnimationFrame(tick)
+  }
+
+  releaseHold = release
+  for (const event of USER_SCROLL_EVENTS) window.addEventListener(event, release, { capture: true, passive: true })
+  frame = requestAnimationFrame(tick)
 }
 
 export function timeAgo(unixSeconds: number) {

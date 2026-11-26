@@ -37,7 +37,7 @@ export function FileDiffCard<T>({
   const kind = file.analysis.kind ?? (collapsed ? hunks[0]?.kind : null)
 
   return (
-    // For scrollToFile and scrollToHunk.
+    // For scrollToHunk, and showing a thread from the conversation.
     <section
       data-file={file.filename}
       data-hunks={hunks.map((h) => h.id).join(" ")}

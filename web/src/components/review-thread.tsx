@@ -30,7 +30,8 @@ export function ThreadView({ thread, write, className }: ThreadViewProps) {
   }
 
   return (
-    <div className={cn("flex flex-col gap-3", className)}>
+    // data-thread for showing it from the conversation; the margin keeps the commented lines above it in view.
+    <div data-thread={thread.id} className={cn("flex scroll-mt-24 flex-col gap-3", className)}>
       {(thread.is_resolved || thread.is_outdated) && (
         <div className="flex items-center gap-2 text-xs text-neutral-500">
           {thread.is_resolved && (

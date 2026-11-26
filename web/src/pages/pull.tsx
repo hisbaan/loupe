@@ -8,8 +8,8 @@ import { StackNav } from "@/components/stack-nav"
 import { linkButtonClass } from "@/components/ui"
 import { api, type ApiResult } from "@/lib/api"
 import { useDiscussion } from "@/lib/discussion"
-import { cn, scrollToFile } from "@/lib/utils"
-import type { PullResponse } from "@/lib/types"
+import { cn, scrollAndHold } from "@/lib/utils"
+import type { PullResponse, ReviewThread } from "@/lib/types"
 
 type PullPageProps = {
   owner: string
@@ -80,10 +80,15 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
     await discussion.reload()
   }
 
-  function showFile(path: string) {
+  function showThread(thread: ReviewThread) {
     setMode("guided")
-    // After the diff renders.
-    window.setTimeout(() => scrollToFile(path), 50)
+    // The thread once the diff renders it, its file until then (or for good if
+    // it's outdated), held in place while the review loads above it.
+    scrollAndHold(
+      () =>
+        document.querySelector(`[data-thread="${CSS.escape(thread.id)}"]`) ??
+        document.querySelector(`[data-file="${CSS.escape(thread.path)}"]`),
+    )
   }
 
   const tab = (value: Mode, label: string) => (
@@ -155,7 +160,7 @@ export function PullPage({ owner, repo, number }: PullPageProps) {
       )}
       {mode === "self" && <SelfReview key={pull.head.sha} owner={owner} repo={repo} number={number} pr={result.data} />}
       {mode === "conversation" && (
-        <Conversation owner={owner} repo={repo} pull={pull} state={discussion} onShowFile={showFile} />
+        <Conversation owner={owner} repo={repo} pull={pull} state={discussion} onShowThread={showThread} />
       )}
     </Layout>
   )

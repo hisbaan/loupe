@@ -5,15 +5,15 @@ import { linkButtonClass } from "@/components/ui"
 import { api } from "@/lib/api"
 import { isoTimeAgoSeconds, threadLocation, type DiscussionState } from "@/lib/discussion"
 import { cn, timeAgo } from "@/lib/utils"
-import type { DiscussionComment, Pull, SubmittedReview } from "@/lib/types"
+import type { DiscussionComment, Pull, ReviewThread, SubmittedReview } from "@/lib/types"
 
 type ConversationProps = {
   owner: string
   repo: string
   pull: Pull
   state: DiscussionState
-  /** Shows a thread's file in the diff. */
-  onShowFile: (path: string) => void
+  /** Shows a thread in the diff. */
+  onShowThread: (thread: ReviewThread) => void
 }
 
 type Item = { at: string; comment: DiscussionComment } | { at: string; review: SubmittedReview }
@@ -42,7 +42,7 @@ const REVIEW_COLORS: Record<SubmittedReview["state"], string> = {
 }
 
 /** The pull request's description, conversation, reviews and every review thread. */
-export function Conversation({ owner, repo, pull, state, onShowFile }: ConversationProps) {
+export function Conversation({ owner, repo, pull, state, onShowThread }: ConversationProps) {
   const { discussion, error, write } = state
   if (!discussion) return <p className="text-sm text-neutral-500">{error ?? "Loading the conversation…"}</p>
 
@@ -111,7 +111,7 @@ export function Conversation({ owner, repo, pull, state, onShowFile }: Conversat
             <div key={thread.id} className="rounded-md border border-neutral-200 dark:border-neutral-800">
               <button
                 type="button"
-                onClick={() => onShowFile(thread.path)}
+                onClick={() => onShowThread(thread)}
                 className="block w-full truncate border-b border-neutral-200 bg-neutral-50 px-4 py-2 text-left font-mono text-xs hover:underline dark:border-neutral-800 dark:bg-neutral-900"
               >
                 {threadLocation(thread)}
