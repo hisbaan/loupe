@@ -1,9 +1,8 @@
-//! Guided reviews: generation (streamed over SSE) and the shared cache.
+//! Reviews: generation (streamed over SSE) and the shared cache.
 
 mod job;
 mod output;
 mod prompt;
-mod self_review;
 mod tools;
 
 use std::{collections::HashSet, convert::Infallible};
@@ -31,12 +30,10 @@ use crate::{
 };
 
 pub fn routes() -> Router<AppState> {
-    Router::new()
-        .route(
-            "/repos/{owner}/{repo}/pulls/{number}/reviews",
-            get(list_reviews).post(create_review),
-        )
-        .merge(self_review::routes())
+    Router::new().route(
+        "/repos/{owner}/{repo}/pulls/{number}/reviews",
+        get(list_reviews).post(create_review),
+    )
 }
 
 #[derive(Serialize)]
@@ -308,7 +305,7 @@ impl Job {
         }
 
         let use_tools = prompt.input.len() <= prompt::MAX_TOOL_INPUT_CHARS;
-        let mut instructions = format!("{}{}", prompt::GUIDED_INSTRUCTIONS, prompt::OUTPUT_INSTRUCTIONS);
+        let mut instructions = format!("{}{}", prompt::INSTRUCTIONS, prompt::OUTPUT_INSTRUCTIONS);
         if use_tools {
             instructions.push_str(&prompt::tool_instructions(self.effort.budget().calls));
         }

@@ -1,7 +1,7 @@
-//! Review prompts. Guided reviews and self-reviews share the input format and
-//! the output schema; only the opening instructions differ. Bump
-//! [`PROMPT_VERSION`] whenever a prompt or the input format changes; cache keys
-//! include it.
+//! The review prompt: one for everyone, whether you're reviewing someone
+//! else's pull request or checking your own (often agent-written) change before
+//! asking for review. Bump [`PROMPT_VERSION`] whenever the prompt or the input
+//! format changes; cache keys include it.
 
 use std::{collections::BTreeMap, fmt::Write};
 
@@ -13,7 +13,7 @@ use crate::{
     pulls::{PullResponse, Stack},
 };
 
-pub const PROMPT_VERSION: i64 = 5;
+pub const PROMPT_VERSION: i64 = 6;
 
 /// Rough cap on diff text sent in one request. Larger pull requests need the
 /// per-file pass, which doesn't exist yet.
@@ -22,15 +22,14 @@ pub const MAX_INPUT_CHARS: usize = 400_000;
 pub const MAX_TOOL_INPUT_CHARS: usize = 150_000;
 const MAX_BODY_CHARS: usize = 4_000;
 
-/// Opens the instructions for a guided review.
-pub const GUIDED_INSTRUCTIONS: &str = r#"You are helping a software engineer review a GitHub pull request. Organise the change so they can read it in order of importance, explain each part in prose before they read its code, and point out specific problems. Say plainly what is routine."#;
+/// Opens the instructions.
+pub const INSTRUCTIONS: &str = r#"You are helping a software engineer review a GitHub pull request. They may be reviewing someone else's change, or checking their own before asking for review; either way, much of the code may have been written by a coding agent, so don't assume the reader already understands it.
 
-/// Opens the instructions for a self-review.
-pub const SELF_REVIEW_INSTRUCTIONS: &str = r#"You are reviewing a GitHub pull request before it is sent for human review, usually at the request of its author. Your findings will be checked by the author and handed to a coding agent to fix, so each must be specific, actionable and pinned to exact lines.
+Organise the change so it can be read in order of importance, explain each part in prose before its code, and say plainly what is routine.
 
-Look hard for real problems: bugs and wrong logic, unhandled edge cases and errors, security issues, data loss or migration risks, concurrency issues, performance problems, missing or inadequate tests for new behaviour, and code that is genuinely hard to follow. Prefer fewer, high-confidence findings over many speculative ones, and don't report pure style preferences."#;
+Then look hard for real problems: bugs and wrong logic, unhandled edge cases and errors, security issues, data loss or migration risks, concurrency issues, performance problems, missing or inadequate tests for new behaviour, and code that is genuinely hard to follow. The reader may post your findings on GitHub or hand them to a coding agent to fix, so each must be specific, actionable and pinned to exact lines. Prefer fewer, high-confidence findings over many speculative ones, and don't report pure style preferences."#;
 
-/// What to produce, for every kind of review.
+/// What to produce.
 pub const OUTPUT_INSTRUCTIONS: &str = r#"
 
 Each hunk is shown with line numbers: the first column is the line in the base (old) file, the second the line in the head (new) file; a line exists only on the side(s) that have a number.

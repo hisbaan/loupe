@@ -1,5 +1,4 @@
-//! The review schema produced by the model and stored in the cache. Guided
-//! reviews and self-reviews share it; only the prompt differs. Bump
+//! The review schema produced by the model and stored in the cache. Bump
 //! [`SCHEMA_VERSION`] on any breaking change; cache keys include it.
 
 use std::collections::{BTreeMap, HashSet};
