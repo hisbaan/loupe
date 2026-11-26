@@ -1,6 +1,7 @@
 //! A pull request's discussion on GitHub: the conversation, review threads and
 //! submitted reviews, plus the writes a reviewer needs (comments, replies,
-//! resolving threads, approving or requesting changes).
+//! resolving threads, approving or requesting changes) and marking a draft
+//! ready for review.
 //!
 //! Everything uses the requesting user's token, so GitHub decides what they may
 //! read and write. Writes happen only on an explicit request from the user,
@@ -42,6 +43,7 @@ pub fn routes() -> Router<AppState> {
             "/repos/{owner}/{repo}/pulls/{number}/review",
             post(submit_review).delete(discard_review),
         )
+        .route("/repos/{owner}/{repo}/pulls/{number}/ready", post(mark_ready))
         .route("/discussion/threads/{id}/replies", post(reply))
         .route("/discussion/threads/{id}/resolved", put(set_resolved))
         .route("/discussion/{kind}/{id}", patch(edit_comment).delete(delete_comment))
@@ -554,6 +556,33 @@ async fn discard_review(
         &token,
         "mutation($input: DeletePullRequestReviewInput!) { deletePullRequestReview(input: $input) { pullRequestReview { id } } }",
         json!({ "input": { "pullRequestReviewId": review } }),
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct ReadyRequest {
+    /// The head commit the user saw.
+    head_sha: String,
+}
+
+/// Takes a draft pull request out of draft. Pinned to the head commit on
+/// screen, like a review: the user is vouching for what they've seen.
+async fn mark_ready(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path((owner, repo, number)): Path<(String, String, u64)>,
+    Json(request): Json<ReadyRequest>,
+) -> AppResult<StatusCode> {
+    check_names(&owner, &repo)?;
+    let token = github::user_token(&state, user.id).await?;
+    let target = target(&state, &token, &owner, &repo, number, Some(&request.head_sha)).await?;
+    github::mutate::<Value>(
+        &state,
+        &token,
+        "mutation($input: MarkPullRequestReadyForReviewInput!) { markPullRequestReadyForReview(input: $input) { pullRequest { id } } }",
+        json!({ "input": { "pullRequestId": target.id } }),
     )
     .await?;
     Ok(StatusCode::NO_CONTENT)
