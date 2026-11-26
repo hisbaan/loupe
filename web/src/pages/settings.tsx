@@ -191,7 +191,9 @@ function ReviewSection({ contents }: { contents: VaultContents | null }) {
           onChange={(effort) => updateInferenceSettings({ effort })}
         />
         <p className="text-neutral-500">
-          {EFFORTS.find((e) => e.value === inference.effort)?.description} You can also switch it beside a review.
+          {EFFORTS.find((e) => e.value === inference.effort)?.description} Every level reads the whole diff; effort sets
+          how hard the model thinks and how much of the rest of the repository it looks at for context. You can also
+          switch it beside a review.
         </p>
         {contents == null && <p className="text-neutral-500">Unlock your vault below to load the list of models.</p>}
         {error && <p className="text-red-600">{error}</p>}

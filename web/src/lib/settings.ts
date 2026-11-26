@@ -18,9 +18,17 @@ export type InferenceSettings = {
 
 /** Mirrors api/src/reviews/job.rs `Effort`. */
 export const EFFORTS: { value: Effort; label: string; description: string }[] = [
-  { value: "quick", label: "Quick", description: "Low reasoning effort; reads up to 8 files or searches." },
-  { value: "standard", label: "Standard", description: "Medium reasoning effort; up to 25 reads or searches." },
-  { value: "thorough", label: "Thorough", description: "High reasoning effort; up to 50 reads or searches. Slower." },
+  { value: "quick", label: "Quick", description: "Thinks briefly and takes a quick look at code outside the diff. Fastest." },
+  {
+    value: "standard",
+    label: "Standard",
+    description: "Thinks it through and checks the surrounding code wherever the diff needs it.",
+  },
+  {
+    value: "thorough",
+    label: "Thorough",
+    description: "Thinks hardest and follows the change through the rest of the repository. Slowest.",
+  },
 ]
 
 export type Settings = {
