@@ -99,7 +99,7 @@ export function ReviewPanel({ owner, repo, pull, state }: ReviewPanelProps) {
         {pending ? `Review · ${pending.comments} pending` : (decided?.button ?? "Review")}
       </button>
       {open && (
-        <div className="absolute top-full right-0 z-20 mt-2 flex w-96 flex-col gap-3 rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-lg dark:border-neutral-800 dark:bg-neutral-950">
+        <div className="absolute top-full right-0 z-20 mt-2 flex w-96 max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-md border border-neutral-200 bg-white p-4 text-sm shadow-lg dark:border-neutral-800 dark:bg-neutral-950">
           <textarea
             autoFocus
             value={body}

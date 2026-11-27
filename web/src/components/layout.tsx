@@ -14,7 +14,7 @@ export function Layout({ children, aside, wide = false }: LayoutProps) {
 
   return (
     <div className="min-h-screen">
-      <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-3 dark:border-neutral-800">
+      <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 sm:px-6 dark:border-neutral-800">
         <Link href="/" className="font-semibold tracking-tight">
           loupe
         </Link>
@@ -34,7 +34,7 @@ export function Layout({ children, aside, wide = false }: LayoutProps) {
           )}
         </div>
       </header>
-      <main className={wide ? "px-6 py-8" : "mx-auto max-w-7xl px-6 py-8"}>{children}</main>
+      <main className={wide ? "px-4 py-8 sm:px-6" : "mx-auto max-w-7xl px-4 py-8 sm:px-6"}>{children}</main>
     </div>
   )
 }
