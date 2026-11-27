@@ -39,9 +39,12 @@ export function ReviewColumns({ aside, children }: { aside: ReactNode; children:
     setNarrowOpen(false)
   }
 
-  // Over the diff, close on a click outside or Escape.
+  // Over the diff, close on a click outside or Escape, and keep the page still so a swipe scrolls only the sidebar.
   useEffect(() => {
     if (!overlay) return
+    const root = document.documentElement
+    const previousOverflow = root.style.overflow
+    root.style.overflow = "hidden"
     const onPointerDown = (event: PointerEvent) => {
       if (!ref.current?.contains(event.target as Node)) setNarrowOpen(false)
     }
@@ -51,19 +54,23 @@ export function ReviewColumns({ aside, children }: { aside: ReactNode; children:
     document.addEventListener("pointerdown", onPointerDown)
     document.addEventListener("keydown", onKeyDown)
     return () => {
+      root.style.overflow = previousOverflow
       document.removeEventListener("pointerdown", onPointerDown)
       document.removeEventListener("keydown", onKeyDown)
     }
   }, [overlay])
 
-  const toggle = (
+  const toggle = (className: string) => (
     <button
       type="button"
       onClick={() => setOpen(!open)}
       aria-expanded={open}
       aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
       title={open ? "Collapse sidebar" : "Expand sidebar"}
-      className="flex size-7 shrink-0 items-center justify-center rounded-md border border-neutral-300 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:border-neutral-700 dark:hover:bg-neutral-900 dark:hover:text-neutral-100"
+      className={cn(
+        "flex shrink-0 items-center justify-center border text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100",
+        className,
+      )}
     >
       <svg viewBox="0 0 16 16" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
         <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
@@ -73,21 +80,34 @@ export function ReviewColumns({ aside, children }: { aside: ReactNode; children:
     </button>
   )
 
+  const inlineToggle = toggle(
+    "size-7 rounded-md border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900",
+  )
+
   return (
     <div className="flex gap-6">
-      {/* In flow whenever the sidebar isn't, so opening it over the diff doesn't move the diff. */}
-      {!(open && wide) && <div className="sticky top-4 h-fit shrink-0">{toggle}</div>}
+      {/* Wide: in flow whenever the sidebar isn't, so opening it doesn't move the diff. Narrow: floating, so the diff
+          gets the whole width. */}
+      {!open &&
+        (wide ? (
+          <div className="sticky top-4 h-fit shrink-0">{inlineToggle}</div>
+        ) : (
+          toggle(
+            "fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-20 size-11 rounded-full border-neutral-300 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-950",
+          )
+        ))}
+      {overlay && <div aria-hidden className="fixed inset-0 z-30 bg-black/40" />}
       {open && (
         <aside
           ref={ref}
           className={cn(
             "flex w-72 shrink-0 flex-col gap-4 overflow-y-auto",
             overlay
-              ? "fixed inset-y-0 left-0 z-30 max-w-[85vw] border-r border-neutral-200 bg-white p-4 shadow-lg dark:border-neutral-800 dark:bg-neutral-950"
+              ? "fixed inset-y-0 left-0 z-30 max-w-[85vw] overscroll-contain border-r border-neutral-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-lg dark:border-neutral-800 dark:bg-neutral-950"
               : "sticky top-4 h-fit max-h-[calc(100vh-2rem)]",
           )}
         >
-          <div className="flex justify-end">{toggle}</div>
+          <div className="flex justify-end">{inlineToggle}</div>
           <SidebarNavigateContext.Provider value={() => overlay && setNarrowOpen(false)}>{aside}</SidebarNavigateContext.Provider>
         </aside>
       )}
