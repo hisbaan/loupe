@@ -47,7 +47,7 @@ pub enum Attention {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagram {
-    /// Only `"mermaid"` for now.
+    /// Always `"mermaid"`.
     pub kind: String,
     pub source: String,
     pub caption: Option<String>,

@@ -15,8 +15,8 @@ use crate::{
 
 pub const PROMPT_VERSION: i64 = 6;
 
-/// Rough cap on diff text sent in one request. Larger pull requests need the
-/// per-file pass, which doesn't exist yet.
+/// Rough cap on diff text sent in one request. Larger pull requests are refused
+/// rather than reviewed in parts.
 pub const MAX_INPUT_CHARS: usize = 400_000;
 /// Above this, tools are disabled: every tool round resends the whole input.
 pub const MAX_TOOL_INPUT_CHARS: usize = 150_000;

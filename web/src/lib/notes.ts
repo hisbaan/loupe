@@ -96,8 +96,8 @@ export function findingDraft(finding: Finding): string {
 
 /**
  * Whether a note's lines are in the diff on screen: its hunk is unchanged
- * (hunk ids hash the path and the hunk's text, line numbers included). Notes
- * carried over from self-reviews have no hunk and only place on their commit.
+ * (hunk ids hash the path and the hunk's text, line numbers included). A note
+ * with no hunk only places on the commit it was written on.
  */
 export function isPlaced(note: AgentNote, hunkIds: Set<string>, headSha: string): boolean {
   return note.hunk_id ? hunkIds.has(note.hunk_id) : note.head_sha === headSha

@@ -1,5 +1,5 @@
-//! Plumbing shared by every kind of generated review: streaming progress to
-//! the browser over SSE, and the model loop with read-only repository tools.
+//! Review generation plumbing: streaming progress to the browser over SSE, and
+//! the model loop with read-only repository tools.
 
 use std::{convert::Infallible, future::Future, time::Duration};
 

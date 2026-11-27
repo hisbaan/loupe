@@ -2,7 +2,7 @@
 //! its diff is just that layer.
 //!
 //! GitHub's own stacks come from `GET /repos/{owner}/{repo}/stacks`, which
-//! `gh stack` uses but GitHub's REST reference doesn't document yet. When it's
+//! `gh stack` uses but GitHub's REST reference doesn't document. When it's
 //! missing (stacks not enabled, a 404) or fails, the stack is worked out by
 //! following branches between open pull requests in the same repository, which
 //! also finds stacks made with other tools.

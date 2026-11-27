@@ -73,7 +73,7 @@ function readJson(text: string | null): unknown {
   }
 }
 
-/** Before settings were saved to the account, each lived in its own localStorage key. */
+/** Older per-setting localStorage keys: read once to seed the cache, then removed. */
 const LEGACY_KEYS = ["loupe.diff-settings", "loupe.provider", "loupe.model.chatgpt", "loupe.model.api_key"]
 
 function initial(): Settings {
