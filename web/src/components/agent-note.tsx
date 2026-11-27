@@ -4,9 +4,13 @@ import { buttonClass, ghostButtonClass, inputClass, noteClass, secondaryButtonCl
 import { cn } from "@/lib/utils"
 import type { AgentNote } from "@/lib/types"
 
-/** Marks notes for your agent apart from GitHub comments, which other people see. */
+/**
+ * Marks notes for your agent apart from GitHub comments, which other people see. The violet is
+ * in the borders; the background is only a faint tint, kept opaque so the diff's line highlight
+ * doesn't show through it.
+ */
 export const agentNoteClass =
-  "border-y-violet-300 border-l-4 border-l-violet-400 border-dashed bg-violet-50/60 dark:border-y-violet-800 dark:border-l-violet-700 dark:bg-violet-950/30"
+  "border-y-violet-300 border-l-4 border-l-violet-400 border-dashed bg-[color-mix(in_oklab,var(--color-violet-500)_4%,var(--color-white))] dark:border-y-violet-800 dark:border-l-violet-700 dark:bg-[color-mix(in_oklab,var(--color-violet-500)_7%,var(--color-neutral-950))]"
 
 export function LockIcon({ className }: { className?: string }) {
   return (
